@@ -14,22 +14,23 @@ const fields = {
   title: v.string(),
   brief: v.string(),
   producerClerkId: v.optional(v.string()),
+  producerPendingEmail: v.optional(v.string()),
   directorClerkId: v.optional(v.string()),
+  directorPendingEmail: v.optional(v.string()),
   cmoClerkId: v.optional(v.string()),
   dueDate: v.optional(v.string()),
 };
-export async function validateFields(
-  ctx: MutationCtx,
-  teamId: Id<"teams">,
-  input: {
+type AssignmentFields = {
     title: string;
     brief: string;
     producerClerkId?: string;
+    producerPendingEmail?: string;
     directorClerkId?: string;
+    directorPendingEmail?: string;
     cmoClerkId?: string;
     dueDate?: string;
-  },
-) {
+};
+function normalizedFields(input: AssignmentFields) {
   const title = input.title.trim();
   if (!title || title.length > 200)
     throw new ConvexError("Give this assignment a title of 1–200 characters.");
@@ -42,6 +43,21 @@ export async function validateFields(
       new Date(input.dueDate).toISOString().slice(0, 10) !== input.dueDate)
   )
     throw new ConvexError("Choose a valid due date.");
+  for (const [subject, pending] of [[input.producerClerkId,input.producerPendingEmail],[input.directorClerkId,input.directorPendingEmail]]) {
+    if(subject && pending) throw new ConvexError("Select either a current member or an invited person for each role.");
+    if(pending && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pending.trim())) throw new ConvexError("Choose a valid invited email address.");
+  }
+  return {...input,title,brief:input.brief.trim(),producerPendingEmail:input.producerPendingEmail?.trim().toLowerCase()||undefined,directorPendingEmail:input.directorPendingEmail?.trim().toLowerCase()||undefined};
+}
+export async function validateFields(ctx:MutationCtx,teamId:Id<"teams">,input:AssignmentFields) {
+  const normalized=normalizedFields(input);
+  for(const email of [normalized.producerPendingEmail,normalized.directorPendingEmail]) {
+    if(!email) continue;
+    const invitations=await ctx.db.query("teamInvites").withIndex("by_email",q=>q.eq("email",email)).collect();
+    const scoped=invitations.filter(invite=>invite.teamId===teamId);
+    const invite=scoped[0];
+    if(scoped.length!==1 || !invite || invite.expiresAt<=Date.now() || invite.role==="viewer") throw new ConvexError("Pending assignees need a current content-team invitation for this workspace.");
+  }
   for (const [kind, subject] of [
     ["producer", input.producerClerkId],
     ["director", input.directorClerkId],
@@ -59,14 +75,14 @@ export async function validateFields(
         "Assignees must be current members of this team with editing access.",
       );
   }
-  return { ...input, title, brief: input.brief.trim() };
+  return normalized;
 }
 
 export const list = query({
   args: { teamId: v.id("teams") },
   handler: async (ctx, { teamId }) => {
     const { user, membership } = await requireTeamAccess(ctx, teamId);
-    const [items, projects, members, productionTeams, batches] = await Promise.all([
+    const [items, projects, members, productionTeams, batches, invitations] = await Promise.all([
       ctx.db
         .query("contentItems")
         .withIndex("by_team", (q) => q.eq("teamId", teamId))
@@ -81,6 +97,7 @@ export const list = query({
         .collect(),
       ctx.db.query("productionTeams").withIndex("by_team", q => q.eq("teamId", teamId)).collect(),
       ctx.db.query("contentBatches").withIndex("by_team", q => q.eq("teamId", teamId)).collect(),
+      canManageContent(membership.role) ? ctx.db.query("teamInvites").withIndex("by_team",q=>q.eq("teamId",teamId)).collect() : Promise.resolve([]),
     ]);
     const videos = (
       await Promise.all(
@@ -100,6 +117,7 @@ export const list = query({
       canManage: canManageContent(membership.role),
       canBrowseRaw: membership.role !== "viewer",
       subject: user.subject,
+      pendingMembers: invitations.filter(invite=>invite.expiresAt>Date.now() && invite.role!=="viewer").map(({email,role})=>({email:email.trim().toLowerCase(),role})).sort((a,b)=>a.email.localeCompare(b.email)),
       productionTeams, batches: batches.sort((a,b) => b._creationTime-a._creationTime),
       projects,
       members: members.map(({ userClerkId, userName, role }) => ({
@@ -179,17 +197,19 @@ export const create = mutation({
       );
     if (!args.requestKey || args.requestKey.length > 100)
       throw new ConvexError("Missing assignment request identity.");
-    const data = await validateFields(ctx, project.teamId, {
+    const input = normalizedFields({
       title: args.title,
       brief: args.brief,
       producerClerkId: args.producerClerkId,
+      producerPendingEmail: args.producerPendingEmail,
       directorClerkId: args.directorClerkId,
+      directorPendingEmail: args.directorPendingEmail,
       cmoClerkId: args.cmoClerkId,
       dueDate: args.dueDate,
     });
     const requestSignature = JSON.stringify({
       projectId: args.projectId,
-      ...data,
+      ...input,
     });
     const existing = await ctx.db
       .query("contentItems")
@@ -207,6 +227,7 @@ export const create = mutation({
         );
       return existing._id;
     }
+    const data = await validateFields(ctx, project.teamId, input);
     return ctx.db.insert("contentItems", {
       ...data,
       projectId: args.projectId,
@@ -237,7 +258,9 @@ export const update = mutation({
       title: args.title,
       brief: args.brief,
       producerClerkId: args.producerClerkId,
+      producerPendingEmail: args.producerPendingEmail,
       directorClerkId: args.directorClerkId,
+      directorPendingEmail: args.directorPendingEmail,
       cmoClerkId: args.cmoClerkId,
       dueDate: args.dueDate,
     });

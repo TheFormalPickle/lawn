@@ -64,8 +64,10 @@ export default defineSchema({
   productionTeams: defineTable({
     teamId: v.id("teams"),
     name: v.string(),
-    directorClerkId: v.string(),
-    producerClerkId: v.string(),
+    directorClerkId: v.optional(v.string()),
+    directorPendingEmail: v.optional(v.string()),
+    producerClerkId: v.optional(v.string()),
+    producerPendingEmail: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_team", ["teamId"]),
 
@@ -95,7 +97,9 @@ export default defineSchema({
     title: v.string(),
     brief: v.string(),
     producerClerkId: v.optional(v.string()),
+    producerPendingEmail: v.optional(v.string()),
     directorClerkId: v.optional(v.string()),
+    directorPendingEmail: v.optional(v.string()),
     cmoClerkId: v.optional(v.string()),
     dueDate: v.optional(v.string()),
     productionStatus: v.union(v.literal("planned"), v.literal("in_progress")),

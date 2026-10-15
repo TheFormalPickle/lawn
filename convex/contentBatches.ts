@@ -9,14 +9,16 @@ export const saveProductionTeam = mutation({
     productionTeamId: v.optional(v.id("productionTeams")),
     expectedUpdatedAt: v.optional(v.number()),
     name: v.string(),
-    directorClerkId: v.string(),
-    producerClerkId: v.string(),
+    directorClerkId: v.optional(v.string()),
+    directorPendingEmail: v.optional(v.string()),
+    producerClerkId: v.optional(v.string()),
+    producerPendingEmail: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireTeamAccess(ctx, args.teamId, "admin");
     if (
-      !args.directorClerkId ||
-      !args.producerClerkId ||
+      Boolean(args.directorClerkId) === Boolean(args.directorPendingEmail?.trim()) ||
+      Boolean(args.producerClerkId) === Boolean(args.producerPendingEmail?.trim()) ||
       args.name.trim().length > 100
     )
       throw new ConvexError(
@@ -26,7 +28,9 @@ export const saveProductionTeam = mutation({
       title: args.name,
       brief: "",
       directorClerkId: args.directorClerkId,
+      directorPendingEmail: args.directorPendingEmail,
       producerClerkId: args.producerClerkId,
+      producerPendingEmail: args.producerPendingEmail,
     });
     const existing = args.productionTeamId
       ? await ctx.db.get(args.productionTeamId)
@@ -37,8 +41,10 @@ export const saveProductionTeam = mutation({
       throw new ConvexError("This team changed. Reopen its latest roster.");
     const data = {
       name: validated.title,
-      directorClerkId: args.directorClerkId,
-      producerClerkId: args.producerClerkId,
+      directorClerkId: validated.directorClerkId,
+      directorPendingEmail: validated.directorPendingEmail,
+      producerClerkId: validated.producerClerkId,
+      producerPendingEmail: validated.producerPendingEmail,
       updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1),
     };
     if (existing) {
@@ -54,7 +60,9 @@ export const saveProductionTeam = mutation({
       (team) =>
         team.name === data.name &&
         team.directorClerkId === data.directorClerkId &&
-        team.producerClerkId === data.producerClerkId,
+        team.producerClerkId === data.producerClerkId &&
+        team.directorPendingEmail === data.directorPendingEmail &&
+        team.producerPendingEmail === data.producerPendingEmail,
     );
     return match
       ? match._id
@@ -124,7 +132,9 @@ export const create = mutation({
       brief: args.notes,
       dueDate: args.dueDate,
       directorClerkId: pair.directorClerkId,
+      directorPendingEmail: pair.directorPendingEmail,
       producerClerkId: pair.producerClerkId,
+      producerPendingEmail: pair.producerPendingEmail,
     });
     const batchId = await ctx.db.insert("contentBatches", {
       teamId: project.teamId,
@@ -146,8 +156,10 @@ export const create = mutation({
         sequence: index,
         title: `${validated.title} · Deliverable ${index}`,
         brief: validated.brief,
-        producerClerkId: pair.producerClerkId,
-        directorClerkId: pair.directorClerkId,
+        producerClerkId: validated.producerClerkId,
+        producerPendingEmail: validated.producerPendingEmail,
+        directorClerkId: validated.directorClerkId,
+        directorPendingEmail: validated.directorPendingEmail,
         dueDate: args.dueDate,
         productionStatus: "planned",
         createdByClerkId: user.subject,

@@ -15,12 +15,19 @@ const modules = {
   "../convex/contentItems.ts": () => import("../convex/contentItems"),
 };
 
-test("internal policy is explicit, capped and fail-closed; subscription remains the default", () => {
+test("internal storage has no default SaaS cap; explicit caps and subscription rules remain fail-closed", () => {
   assert.equal(deploymentBillingPolicy({}).mode, "subscription");
   assert.equal(
     deploymentBillingPolicy({ LAWN_BILLING_MODE: "internal" })
       .storageLimitBytes,
-    100 * 1024 ** 3,
+    null,
+  );
+  assert.equal(
+    deploymentBillingPolicy({
+      LAWN_BILLING_MODE: "internal",
+      LAWN_INTERNAL_STORAGE_GB: "unlimited",
+    }).storageLimitBytes,
+    null,
   );
   assert.equal(
     deploymentBillingPolicy({
@@ -96,6 +103,19 @@ test("fresh internal team needs no fake subscription, retains roles/cap and cann
       }),
       /storage limit/,
     );
+    // Uncapped mode still accounts for recorded bytes; it must not fall back to
+    // Basic's100GiB allowance. This saves metadata, not a huge media transfer.
+    process.env.LAWN_INTERNAL_STORAGE_GB = "unlimited";
+    const uncapped = await head.query(api.billing.getTeamBilling, { teamId });
+    assert.equal(uncapped.storageLimitBytes, null);
+    const largeReservation = await head.mutation(api.videos.create, {
+      projectId,
+      title: "Above the old application cap",
+      fileSize: 101 * 1024 ** 3,
+    });
+    assert.ok(largeReservation);
+    const accounted = await head.query(api.billing.getTeamBilling, { teamId });
+    assert.equal(accounted.storageUsedBytes, 102 * 1024 ** 3 - 10);
     await t.run((ctx) =>
       ctx.db.insert("teamMembers", {
         teamId,

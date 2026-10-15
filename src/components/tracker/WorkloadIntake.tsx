@@ -7,6 +7,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { assigneeSelection, selectedAssignee } from "@/lib/assigneeSelection";
 import {
   Dialog,
   DialogContent,
@@ -152,13 +153,17 @@ export function WorkloadIntake({
     setBusy(true);
     setError("");
     try {
+      const selectedDirector = selectedAssignee(director);
+      const selectedProducer = selectedAssignee(producer);
       const id = await saveTeam({
         teamId,
         productionTeamId: teamEdit?._id,
         expectedUpdatedAt: teamEdit?.updatedAt,
         name,
-        directorClerkId: director,
-        producerClerkId: producer,
+        directorClerkId: selectedDirector.clerkId,
+        directorPendingEmail: selectedDirector.pendingEmail,
+        producerClerkId: selectedProducer.clerkId,
+        producerPendingEmail: selectedProducer.pendingEmail,
       });
       setPair(id);
       setName("");
@@ -212,7 +217,7 @@ export function WorkloadIntake({
             </DialogTitle>
             <DialogDescription>
               {mode === "teams"
-                ? "Set up director/producer pairs once. Existing work keeps its assigned people when a roster changes."
+                ? "Set up director/producer pairs once, including invited teammates who have not joined yet. Existing work keeps its assigned people when a roster changes."
                 : "Choose the client, count, deadline and team. Atrium creates the delivery slots; directors plan each ad."}
             </DialogDescription>
           </DialogHeader>
@@ -350,19 +355,35 @@ export function WorkloadIntake({
                   onClick={() => {
                     setTeamEdit(t);
                     setName(t.name);
-                    setDirector(t.directorClerkId);
-                    setProducer(t.producerClerkId);
+                    setDirector(
+                      assigneeSelection(
+                        t.directorClerkId,
+                        t.directorPendingEmail,
+                      ),
+                    );
+                    setProducer(
+                      assigneeSelection(
+                        t.producerClerkId,
+                        t.producerPendingEmail,
+                      ),
+                    );
                   }}
                 >
                   <strong>{t.name}</strong>
                   <span className="block text-xs text-[#888]">
                     {data.members.find(
                       (m) => m.userClerkId === t.directorClerkId,
-                    )?.userName ?? "Former member"}{" "}
+                    )?.userName ??
+                      (t.directorPendingEmail
+                        ? `${t.directorPendingEmail} (invited)`
+                        : "Former member")}{" "}
                     ·{" "}
                     {data.members.find(
                       (m) => m.userClerkId === t.producerClerkId,
-                    )?.userName ?? "Former member"}
+                    )?.userName ??
+                      (t.producerPendingEmail
+                        ? `${t.producerPendingEmail} (invited)`
+                        : "Former member")}
                   </span>
                 </button>
               ))}
@@ -412,6 +433,14 @@ export function WorkloadIntake({
                               {m.userName}
                             </option>
                           ))}
+                        {(data.pendingMembers ?? []).map((m) => (
+                          <option
+                            key={`invite:${m.email}`}
+                            value={assigneeSelection(undefined, m.email)}
+                          >
+                            {m.email} (invited)
+                          </option>
+                        ))}
                       </select>
                     </label>
                   ))}

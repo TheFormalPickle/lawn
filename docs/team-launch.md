@@ -14,14 +14,17 @@ selected Convex deployment, never as browser-controlled `VITE_` values:
 
 ```text
 LAWN_BILLING_MODE=internal
-LAWN_INTERNAL_STORAGE_GB=100
+LAWN_INTERNAL_STORAGE_GB=unlimited
 ```
 
 This enables projects/uploads without Lawn subscription checkout and retains
-team authentication, roles, assignment/review gates and a per-team storage cap.
-Default mode remains `subscription`; an unknown mode or invalid cap fails closed.
-The cap counts recorded nonfailed video sizes plus pending/ready raw originals.
-It is not a physical bucket quota, archival/retention policy or full storage audit.
+team authentication, roles and assignment/review gates. Internal mode has no
+application storage cap by default; available physical storage still applies.
+Default mode remains `subscription`; an unknown mode or invalid configured cap fails closed.
+A positive whole number optionally sets a per-team GiB application cap for other
+installations. Recorded usage counts nonfailed video sizes plus pending/ready raw originals.
+Recorded usage is not physical NAS used/free capacity, an archival/retention policy
+or a full storage audit.
 Hosting, storage and Mux still incur their own infrastructure costs. Internal mode
 does not restrict signup, change public share defaults, cancel old subscriptions,
 or make the installation private on the network. Use it for this new installation;

@@ -164,11 +164,10 @@ function KeycloakStateProvider({ children }: { children: ReactNode }) {
   }, []);
   const switchAccount = useCallback(async (returnPath: string) => {
     const client = await initializeKeycloak();
-    // A normal login can immediately reuse the wrong account's SSO session.
-    // Explicit switching must show credentials while retaining the exact invite.
-    await client.login({
-      prompt: "login",
-      redirectUri: `${window.location.origin}${safeAuthReturnPath(returnPath)}`,
+    // Re-authentication locks Keycloak to the current username. End that session
+    // explicitly, then sign in again with the exact invitation still retained.
+    await client.logout({
+      redirectUri: `${window.location.origin}/sign-in?redirect_url=${encodeURIComponent(safeAuthReturnPath(returnPath))}`,
     });
   }, []);
   const account = useCallback(async () => {

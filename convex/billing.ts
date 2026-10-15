@@ -39,7 +39,10 @@ export const createSubscriptionCheckout = action({
     sessionId: v.string(),
     url: v.union(v.string(), v.null()),
   }),
-  handler: async (ctx, args): Promise<{ sessionId: string; url: string | null }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ sessionId: string; url: string | null }> => {
     const identity = await getIdentity(ctx);
     const team = await ctx.runQuery(api.teams.get, { teamId: args.teamId });
 
@@ -52,14 +55,19 @@ export const createSubscriptionCheckout = action({
     }
 
     if (deploymentBillingPolicy().mode === "internal")
-      throw new Error("Subscription checkout and billing portals are disabled for this internal agency deployment.");
+      throw new Error(
+        "Subscription checkout and billing portals are disabled for this internal agency deployment.",
+      );
 
     const existingSubscription = await ctx.runQuery(
       components.stripe.public.getSubscriptionByOrgId,
       { orgId: args.teamId },
     );
 
-    if (existingSubscription && hasActiveTeamSubscriptionStatus(existingSubscription.status)) {
+    if (
+      existingSubscription &&
+      hasActiveTeamSubscriptionStatus(existingSubscription.status)
+    ) {
       throw new Error(
         "This team already has an active subscription. Use the billing portal to manage it.",
       );
@@ -148,7 +156,9 @@ export const createCustomerPortalSession = action({
     }
 
     if (deploymentBillingPolicy().mode === "internal")
-      throw new Error("Subscription checkout and billing portals are disabled for this internal agency deployment.");
+      throw new Error(
+        "Subscription checkout and billing portals are disabled for this internal agency deployment.",
+      );
 
     const existingSubscription = await ctx.runQuery(
       components.stripe.public.getSubscriptionByOrgId,
@@ -178,7 +188,7 @@ export const getTeamBilling = query({
     billingMode: v.union(v.literal("internal"), v.literal("subscription")),
     canUseWorkspace: v.boolean(),
     monthlyPriceUsd: v.number(),
-    storageLimitBytes: v.number(),
+    storageLimitBytes: v.union(v.number(), v.null()),
     storageUsedBytes: v.number(),
     hasActiveSubscription: v.boolean(),
     subscriptionStatus: v.union(v.string(), v.null()),
@@ -199,7 +209,10 @@ export const getTeamBilling = query({
       plan: subscriptionState.plan,
       billingMode: subscriptionState.billingMode,
       canUseWorkspace: subscriptionState.canUseWorkspace,
-      monthlyPriceUsd: subscriptionState.billingMode === "internal" ? 0 : TEAM_PLAN_MONTHLY_PRICE_USD[subscriptionState.plan],
+      monthlyPriceUsd:
+        subscriptionState.billingMode === "internal"
+          ? 0
+          : TEAM_PLAN_MONTHLY_PRICE_USD[subscriptionState.plan],
       storageLimitBytes: subscriptionState.storageLimitBytes,
       storageUsedBytes,
       hasActiveSubscription: subscriptionState.hasActiveSubscription,
@@ -213,10 +226,13 @@ export const getTeamBilling = query({
         subscription?.stripeSubscriptionId ??
         subscriptionState.team.stripeSubscriptionId ??
         null,
-      stripePriceId: subscription?.priceId ?? subscriptionState.team.stripePriceId ?? null,
+      stripePriceId:
+        subscription?.priceId ?? subscriptionState.team.stripePriceId ?? null,
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
       role: membership.role,
-      canManageBilling: membership.role === "owner" && subscriptionState.billingMode === "subscription",
+      canManageBilling:
+        membership.role === "owner" &&
+        subscriptionState.billingMode === "subscription",
     };
   },
 });

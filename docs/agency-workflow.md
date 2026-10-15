@@ -276,3 +276,21 @@ billing or media permission was changed. Actual compiled normal dashboard/layout
 tracker routes, memory history and local API records pass for single/CMO/multiple/
 empty/explicit-management cases at1440/390. Clerk identity/avatar remain inert in
 that test, and native OS or production sign-in is not claimed.
+
+
+## Pending teammates and NAS capacity — October15 follow-up
+
+Admins can select current content-team invitees while setting up director/producer
+pairs, individual assignments and client workloads. Pending people are labeled by
+email; they are not fabricated authenticated members. Acceptance of the exact
+email-bound invitation atomically connects that person's account to the pair and
+its explicitly pending work. Inviting or assigning someone grants no access before
+they join. Expired, foreign or CMO-only invitations cannot create editing assignments.
+Changing a pair later still does not rewrite previously assigned work.
+
+Jacob explicitly removed the default100GiB application allowance for the office
+installation. Internal mode defaults to no application cap and the beta uses the
+explicit `LAWN_INTERNAL_STORAGE_GB=unlimited` setting. Recorded upload usage remains
+accounted separately from physical NAS capacity/free space. Other deployments can
+retain an explicit positive GiB cap; subscription limits are unchanged. This does
+not promise infinite physical storage or replace NAS availability checks.

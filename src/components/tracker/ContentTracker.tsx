@@ -30,6 +30,7 @@ import { ListTodo, FolderCheck, ChevronRight, Library } from "lucide-react";
 import { hasFileDrop, isVideoFile } from "@/lib/useGlobalFileDrop";
 import { Brand } from "@/components/Brand";
 import { WorkloadIntake } from "./WorkloadIntake";
+import { assigneeSelection, selectedAssignee } from "@/lib/assigneeSelection";
 import { RawAssetLibrary } from "@/components/assets/RawAssetLibrary";
 
 type Data = FunctionReturnType<typeof api.contentItems.list>;
@@ -158,8 +159,14 @@ export function ContentTracker({
             projectId: item.projectId,
             title: item.title,
             brief: item.brief,
-            producerClerkId: item.producerClerkId ?? "",
-            directorClerkId: item.directorClerkId ?? "",
+            producerClerkId: assigneeSelection(
+              item.producerClerkId,
+              item.producerPendingEmail,
+            ),
+            directorClerkId: assigneeSelection(
+              item.directorClerkId,
+              item.directorPendingEmail,
+            ),
             cmoClerkId: item.cmoClerkId ?? "",
             dueDate: item.dueDate ?? "",
           };
@@ -188,8 +195,12 @@ export function ContentTracker({
     const input = {
       title: draft.title,
       brief: draft.brief,
-      producerClerkId: draft.producerClerkId || undefined,
-      directorClerkId: draft.directorClerkId || undefined,
+      producerClerkId: selectedAssignee(draft.producerClerkId).clerkId,
+      producerPendingEmail: selectedAssignee(draft.producerClerkId)
+        .pendingEmail,
+      directorClerkId: selectedAssignee(draft.directorClerkId).clerkId,
+      directorPendingEmail: selectedAssignee(draft.directorClerkId)
+        .pendingEmail,
       cmoClerkId: draft.cmoClerkId || undefined,
       dueDate: draft.dueDate || undefined,
     };
@@ -256,9 +267,11 @@ export function ContentTracker({
     !data.canBrowseRaw && (tab === null || tab === "raw")
       ? "library"
       : (tab ?? "work");
-  const name = (subject?: string) =>
-    data.members.find((member) => member.userClerkId === subject)?.userName ??
-    (subject ? "Former team member" : "Unassigned");
+  const name = (subject?: string, pendingEmail?: string) =>
+    pendingEmail
+      ? `${pendingEmail} (invited)`
+      : (data.members.find((member) => member.userClerkId === subject)
+          ?.userName ?? (subject ? "Former team member" : "Unassigned"));
   const projectName = (id: Id<"projects">) =>
     data.projects.find((project) => project._id === id)?.name ??
     "Unavailable project";
@@ -580,7 +593,9 @@ export function ContentTracker({
                             : ""}
                         </p>
                       </div>
-                      <p className="text-sm">{name(item.producerClerkId)}</p>
+                      <p className="break-words text-sm">
+                        {name(item.producerClerkId, item.producerPendingEmail)}
+                      </p>
                       <div>
                         <span data-stage={item.stage} className="agency-stage">
                           {CONTENT_STAGE_LABELS[item.stage]}
@@ -697,8 +712,20 @@ export function ContentTracker({
               </p>
               <dl className="grid grid-cols-2 gap-3 border-y border-line py-4 text-sm">
                 {[
-                  ["Producer", name(selected.producerClerkId)],
-                  ["Director / reviewer", name(selected.directorClerkId)],
+                  [
+                    "Producer",
+                    name(
+                      selected.producerClerkId,
+                      selected.producerPendingEmail,
+                    ),
+                  ],
+                  [
+                    "Director / reviewer",
+                    name(
+                      selected.directorClerkId,
+                      selected.directorPendingEmail,
+                    ),
+                  ],
                   ["CMO", name(selected.cmoClerkId)],
                   ["Due date", selected.dueDate || "Not set"],
                 ].map(([label, value]) => (
@@ -956,6 +983,15 @@ export function ContentTracker({
                               value={member.userClerkId}
                             >
                               {member.userName}
+                            </option>
+                          ))}
+                        {key !== "cmoClerkId" &&
+                          (data.pendingMembers ?? []).map((member) => (
+                            <option
+                              key={`invite:${member.email}`}
+                              value={assigneeSelection(undefined, member.email)}
+                            >
+                              {member.email} (invited)
                             </option>
                           ))}
                       </select>

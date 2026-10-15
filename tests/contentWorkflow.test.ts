@@ -11,6 +11,7 @@ const modules = {
   "../convex/contentItems.ts": () => import("../convex/contentItems"),
   "../convex/videos.ts": () => import("../convex/videos"),
   "../convex/projects.ts": () => import("../convex/projects"),
+  "../convex/teams.ts": () => import("../convex/teams"),
 };
 async function fixture() {
   const t = convexTest(schema, modules);
@@ -501,4 +502,82 @@ test("workload bounds, dates, team identity and administrative permissions fail 
   await assert.rejects(f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Bad",directorClerkId:"cmo",producerClerkId:"producer"}),/editing access/);
   assert.equal((await f.head.query(api.contentItems.list,{teamId:f.teamId})).items.length,0);
   await f.head.mutation(api.contentBatches.create,input);await f.head.mutation(api.projects.remove,{projectId:f.projectId});assert.equal((await f.head.query(api.contentItems.list,{teamId:f.teamId})).batches.length,0);
+});
+
+
+test("invited content pair creates exact workload before joining then acceptance resolves only explicit snapshots", async()=>{
+  const f=await fixture();
+  const directorEmail="new-director@example.invalid",producerEmail="new-producer@example.invalid";
+  const directorToken=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email:directorEmail,role:"member"});
+  const producerToken=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email:producerEmail,role:"admin"});
+  const pairInput={teamId:f.teamId,name:"Pending pair",directorPendingEmail:" NEW-DIRECTOR@example.invalid ",producerPendingEmail:producerEmail};
+  const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,pairInput);
+  assert.equal(await f.head.mutation(api.contentBatches.saveProductionTeam,pairInput),pair);
+  const input={projectId:f.projectId,productionTeamId:pair,quantity:3,dueDate:"2026-10-30",notes:"Plan before first login",requestKey:"pending-batch",expectedActorId:"head"};
+  const batch=await f.head.mutation(api.contentBatches.create,input);
+  const before=await f.head.query(api.contentItems.list,{teamId:f.teamId});
+  assert.deepEqual(before.pendingMembers,[{email:directorEmail,role:"member"},{email:producerEmail,role:"admin"}]);
+  assert(before.pendingMembers.every(person=>Object.keys(person).sort().join(",")==="email,role"));
+  assert.deepEqual((await f.producer.query(api.contentItems.list,{teamId:f.teamId})).pendingMembers,[]);
+  assert.equal(before.items.length,3);assert(before.items.every(item=>item.directorClerkId===undefined && item.directorPendingEmail===directorEmail && item.producerPendingEmail===producerEmail));
+  const pendingDirector=f.t.withIdentity({subject:"new-director-sub",email:directorEmail});
+  await assert.rejects(pendingDirector.query(api.contentItems.list,{teamId:f.teamId}));
+  await assert.rejects(pendingDirector.mutation(api.contentItems.plan,{itemId:before.items[0]._id,expectedUpdatedAt:before.items[0].updatedAt,title:"No access yet",brief:""}));
+  // Editing a roster does not rewrite work already assigned to its earlier pending director.
+  await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,productionTeamId:pair,expectedUpdatedAt:before.productionTeams[0].updatedAt,name:"Changed roster",directorClerkId:"unassigned",producerPendingEmail:producerEmail});
+  const foreign=await f.t.run(async ctx=>{const project=await ctx.db.get(f.otherProjectId);return ctx.db.insert("productionTeams",{teamId:project!.teamId,name:"Other workspace pending same email",directorPendingEmail:directorEmail,producerClerkId:"outsider",updatedAt:1});});
+  await pendingDirector.mutation(api.teams.acceptInvite,{token:directorToken});
+  let data=await f.head.query(api.contentItems.list,{teamId:f.teamId});
+  assert(data.items.every(item=>item.directorClerkId==="new-director-sub" && item.directorPendingEmail===undefined && item.producerClerkId===undefined && item.producerPendingEmail===producerEmail));
+  assert(data.items.every(item=>item.updatedAt>before.items.find(old=>old._id===item._id)!.updatedAt));
+  assert.equal(data.productionTeams[0].directorClerkId,"unassigned");
+  assert.equal((await f.t.run(ctx=>ctx.db.get(foreign)))?.directorPendingEmail,directorEmail);
+  assert.equal(await f.head.mutation(api.contentBatches.create,input),batch);assert.equal(data.items.length,3);
+  await pendingDirector.mutation(api.contentItems.plan,{itemId:data.items[0]._id,expectedUpdatedAt:data.items[0].updatedAt,title:"Now assigned director can plan",brief:"Actual accepted membership"});
+  const pendingProducer=f.t.withIdentity({subject:"new-producer-sub",email:producerEmail});await pendingProducer.mutation(api.teams.acceptInvite,{token:producerToken});
+  data=await f.head.query(api.contentItems.list,{teamId:f.teamId});assert(data.items.every(item=>item.producerClerkId==="new-producer-sub" && item.producerPendingEmail===undefined));assert.equal(data.productionTeams[0].producerClerkId,"new-producer-sub");assert.equal(data.productionTeams[0].producerPendingEmail,undefined);
+  assert.equal((await pendingProducer.query(api.teams.list,{})).find(team=>team._id===f.teamId)?.role,"admin");
+});
+
+test("pending assignments reject invalid scope, ambiguous roles, expired revoked and viewer invitations without writes",async()=>{
+  const f=await fixture();const email="pending@example.invalid";
+  const token=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"member"});
+  const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Pair",directorPendingEmail:email,producerClerkId:"producer"});
+  const input={projectId:f.projectId,productionTeamId:pair,quantity:2,dueDate:"2026-10-30",notes:"",requestKey:"first",expectedActorId:"head"};
+  for(const details of [{directorClerkId:"director",directorPendingEmail:email},{directorPendingEmail:undefined},{directorPendingEmail:"missing@example.invalid"}])await assert.rejects(f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Invalid",producerClerkId:"producer",...details}));
+  const stranger=f.t.withIdentity({subject:"wrong",email:"wrong@example.invalid"});await assert.rejects(stranger.mutation(api.teams.acceptInvite,{token}),/different email/);
+  await f.t.run(async ctx=>{const invite=await ctx.db.query("teamInvites").withIndex("by_token",q=>q.eq("token",token)).unique();await ctx.db.patch(invite!._id,{expiresAt:Date.now()-1});});
+  await assert.rejects(f.head.mutation(api.contentBatches.create,input),/current content-team invitation/);
+  await assert.rejects(f.t.withIdentity({subject:"pending",email}).mutation(api.teams.acceptInvite,{token}),/expired/);
+  await f.t.run(async ctx=>{const invite=await ctx.db.query("teamInvites").withIndex("by_token",q=>q.eq("token",token)).unique();await ctx.db.delete(invite!._id);});
+  await assert.rejects(f.head.mutation(api.contentBatches.create,input),/current content-team invitation/);
+  await assert.rejects(f.t.withIdentity({subject:"pending",email}).mutation(api.teams.acceptInvite,{token}),/Invalid invite/);
+  // An invitation in another workspace cannot qualify this workspace's saved pair.
+  await f.t.run(async ctx=>{const project=await ctx.db.get(f.otherProjectId);await ctx.db.insert("teamInvites",{teamId:project!.teamId,email,role:"member",invitedByClerkId:"outsider",invitedByName:"Other owner",token:"other-workspace-token",expiresAt:Date.now()+60000});});
+  await assert.rejects(f.head.mutation(api.contentBatches.create,input),/current content-team invitation/);
+  await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"viewer"});
+  await assert.rejects(f.head.mutation(api.contentBatches.create,input),/current content-team invitation/);
+  assert.equal((await f.head.query(api.contentItems.list,{teamId:f.teamId})).items.length,0);
+});
+
+test("resending or downgrading an invite cannot bind a viewer or mutate the original workload receipt",async()=>{
+  const f=await fixture();const email="future-editor@example.invalid";
+  const oldToken=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"member"});
+  const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Pending editor",directorClerkId:"director",producerPendingEmail:email});
+  const input={projectId:f.projectId,productionTeamId:pair,quantity:1,dueDate:"2026-10-30",notes:"",requestKey:"frozen-batch",expectedActorId:"head"};const batch=await f.head.mutation(api.contentBatches.create,input);
+  const viewerToken=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"viewer"});
+  const person=f.t.withIdentity({subject:"future-editor-sub",email});
+  await assert.rejects(person.mutation(api.teams.acceptInvite,{token:oldToken}),/Invalid invite/);
+  await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,requestKey:"new-work"}),/current content-team invitation/);
+  await person.mutation(api.teams.acceptInvite,{token:viewerToken});
+  const data=await person.query(api.contentItems.list,{teamId:f.teamId});assert.equal(data.canManage,false);assert.equal(data.canBrowseRaw,false);assert.equal(data.items[0].canProduce,false);assert.equal(data.items[0].producerClerkId,undefined);assert.equal(data.items[0].producerPendingEmail,email);
+  assert.equal(await f.head.mutation(api.contentBatches.create,input),batch);assert.equal(data.items.length,1);
+});
+
+test("pending standalone assignment receipts survive accepted invitations and real reassignments clear pending references",async()=>{
+  const f=await fixture();const email="new-planner@example.invalid";const token=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"member"});
+  const input={...f.input,directorClerkId:undefined,directorPendingEmail:email,requestKey:"standalone-pending"};const id=await f.head.mutation(api.contentItems.create,input);
+  const actor=f.t.withIdentity({subject:"new-planner-sub",email});await actor.mutation(api.teams.acceptInvite,{token});assert.equal(await f.head.mutation(api.contentItems.create,input),id);
+  const item=await f.current(id);assert.equal(item?.directorClerkId,"new-planner-sub");assert.equal(item?.directorPendingEmail,undefined);
+  await f.head.mutation(api.contentItems.update,{itemId:id,expectedUpdatedAt:item!.updatedAt,title:item!.title,brief:item!.brief,directorClerkId:"director",producerClerkId:"producer"});const reassigned=await f.current(id);assert.equal(reassigned?.directorClerkId,"director");assert.equal(reassigned?.directorPendingEmail,undefined);
 });

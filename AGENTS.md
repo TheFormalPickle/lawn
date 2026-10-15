@@ -64,7 +64,10 @@ minimal steps and reliability take priority over decoration.
 
 Jacob approved private agency mode on October 15, 2026. The server-only
 `LAWN_BILLING_MODE=internal` enables workspace use without SaaS checkout and retains
-roles, review gates and `LAWN_INTERNAL_STORAGE_GB` (100 GiB per team by default).
+roles and review gates. October15 follow-up explicitly removes the artificial
+100GiB application cap: internal mode defaults to no cap, and the office beta uses
+`LAWN_INTERNAL_STORAGE_GB=unlimited`. Positive explicit caps remain supported for
+other installations; subscription plan limits are unchanged.
 Subscription remains the default. This approval changes local product/configuration
 behavior; it does not authorize spending, new subscriptions, arbitrary invitations,
 production deployment or modification of Atrium. Do not present internal mode as a

@@ -41,7 +41,9 @@ export function resolvePlanFromStripePriceId(
 
 export function getStripePriceIdForPlan(plan: TeamPlan): string {
   const variableName =
-    plan === "basic" ? "STRIPE_PRICE_BASIC_MONTHLY" : "STRIPE_PRICE_PRO_MONTHLY";
+    plan === "basic"
+      ? "STRIPE_PRICE_BASIC_MONTHLY"
+      : "STRIPE_PRICE_PRO_MONTHLY";
   const value = process.env[variableName];
   if (!hasText(value)) {
     throw new Error(`${variableName} is not configured`);
@@ -83,9 +85,17 @@ export async function getTeamSubscriptionState(
   );
 
   const policy = deploymentBillingPolicy();
-  return { team, subscription, plan, hasActiveSubscription, billingMode: policy.mode,
+  return {
+    team,
+    subscription,
+    plan,
+    hasActiveSubscription,
+    billingMode: policy.mode,
     canUseWorkspace: policy.mode === "internal" || hasActiveSubscription,
-    storageLimitBytes: policy.storageLimitBytes ?? TEAM_PLAN_STORAGE_LIMIT_BYTES[plan],
+    storageLimitBytes:
+      policy.mode === "internal"
+        ? policy.storageLimitBytes
+        : TEAM_PLAN_STORAGE_LIMIT_BYTES[plan],
   };
 }
 
@@ -114,7 +124,10 @@ export async function getTeamStorageUsedBytes(
   for (const videos of videosByProject) {
     for (const video of videos) {
       if (video.status === "failed") continue;
-      if (typeof video.fileSize === "number" && Number.isFinite(video.fileSize)) {
+      if (
+        typeof video.fileSize === "number" &&
+        Number.isFinite(video.fileSize)
+      ) {
         total += video.fileSize;
       }
     }
@@ -123,18 +136,32 @@ export async function getTeamStorageUsedBytes(
   return total;
 }
 
-export async function getRawAssetStorageUsedBytes(ctx: BillingCtx, teamId: Id<"teams">) {
+export async function getRawAssetStorageUsedBytes(
+  ctx: BillingCtx,
+  teamId: Id<"teams">,
+) {
   const team = await ctx.db.get(teamId);
   if (!team) throw new Error("Team not found");
   if (team.rawAssetBytes !== undefined) return team.rawAssetBytes;
   // Compatibility for records created before this optional counter existed.
-  const assets = await ctx.db.query("rawAssets").withIndex("by_team", q => q.eq("teamId", teamId)).collect();
-  return assets.reduce((sum, asset) => sum + (asset.status === "removed" ? 0 : asset.fileSize), 0);
+  const assets = await ctx.db
+    .query("rawAssets")
+    .withIndex("by_team", (q) => q.eq("teamId", teamId))
+    .collect();
+  return assets.reduce(
+    (sum, asset) => sum + (asset.status === "removed" ? 0 : asset.fileSize),
+    0,
+  );
 }
-export async function adjustRawAssetBytes(ctx: MutationCtx, teamId: Id<"teams">, delta: number) {
+export async function adjustRawAssetBytes(
+  ctx: MutationCtx,
+  teamId: Id<"teams">,
+  delta: number,
+) {
   const bytes = await getRawAssetStorageUsedBytes(ctx, teamId);
   const next = bytes + delta;
-  if (!Number.isSafeInteger(next) || next < 0) throw new Error("Raw asset storage accounting is unavailable.");
+  if (!Number.isSafeInteger(next) || next < 0)
+    throw new Error("Raw asset storage accounting is unavailable.");
   await ctx.db.patch(teamId, { rawAssetBytes: next });
 }
 
@@ -157,11 +184,18 @@ export async function assertTeamCanStoreBytes(
   const state = await assertTeamCanUseWorkspace(ctx, teamId);
   const storageUsedBytes = await getTeamStorageUsedBytes(ctx, teamId);
   const storageLimitBytes = state.storageLimitBytes;
-  const requestedBytes = Number.isFinite(incomingBytes) ? Math.max(0, incomingBytes) : 0;
+  const requestedBytes = Number.isFinite(incomingBytes)
+    ? Math.max(0, incomingBytes)
+    : 0;
 
-  if (storageUsedBytes + requestedBytes > storageLimitBytes) {
+  if (
+    storageLimitBytes !== null &&
+    storageUsedBytes + requestedBytes > storageLimitBytes
+  ) {
     throw new Error(
-      state.billingMode === "internal" ? "Team storage limit reached. Ask the administrator to review storage before uploading." : `Storage limit reached for the ${state.plan} plan. Upgrade to continue uploading.`,
+      state.billingMode === "internal"
+        ? "Team storage limit reached. Ask the administrator to review storage before uploading."
+        : `Storage limit reached for the ${state.plan} plan. Upgrade to continue uploading.`,
     );
   }
 

@@ -7,7 +7,11 @@ export function deploymentBillingPolicy(
     return { mode, storageLimitBytes: undefined } as const;
   if (mode !== "internal")
     throw new Error("LAWN_BILLING_MODE must be internal or subscription.");
-  const gigabytes = Number(env.LAWN_INTERNAL_STORAGE_GB || "100");
+  const configured = env.LAWN_INTERNAL_STORAGE_GB?.trim();
+  // Internal installations use their own storage. A NAS is not a SaaS plan.
+  if (!configured || configured === "unlimited")
+    return { mode, storageLimitBytes: null } as const;
+  const gigabytes = Number(configured);
   const storageLimitBytes = gigabytes * 1024 ** 3;
   if (
     !Number.isInteger(gigabytes) ||

@@ -258,7 +258,7 @@ export const acceptInvite = mutation({
       throw new Error("Invalid invite");
     }
 
-    if (invite.expiresAt < Date.now()) {
+    if (invite.expiresAt <= Date.now()) {
       throw new Error("Invite has expired");
     }
 
@@ -286,6 +286,24 @@ export const acceptInvite = mutation({
       role: invite.role,
     });
 
+    // Membership and explicit pending assignments resolve in this same transaction.
+    // A viewer invitation never grants content permissions or replaces an actual assignee.
+    if(invite.role!=="viewer") {
+      const email=normalizedEmail(invite.email);
+      for(const table of ["productionTeams","contentItems"] as const) {
+        const records=await ctx.db.query(table).withIndex("by_team",q=>q.eq("teamId",invite.teamId)).collect();
+        for(const record of records) {
+          const director=!record.directorClerkId && record.directorPendingEmail===email;
+          const producer=!record.producerClerkId && record.producerPendingEmail===email;
+          if(!director && !producer) continue;
+          await ctx.db.patch(record._id,{
+            ...(director?{directorClerkId:user.subject,directorPendingEmail:undefined}:{}),
+            ...(producer?{producerClerkId:user.subject,producerPendingEmail:undefined}:{}),
+            updatedAt:Math.max(Date.now(),record.updatedAt+1),
+          });
+        }
+      }
+    }
     await ctx.db.delete(invite._id);
 
     const team = await ctx.db.get(invite.teamId);
