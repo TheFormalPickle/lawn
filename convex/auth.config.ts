@@ -21,4 +21,17 @@ if (mode === "oidc") {
     throw new Error("OIDC issuer must be a secure URL");
   }
 }
-export default { providers: [{ domain, applicationID: audience }] };
+export default {
+  providers:
+    mode === "oidc"
+      ? [
+          {
+            type: "customJwt" as const,
+            issuer: domain!,
+            jwks: `${domain!.replace(/\/$/, "")}/protocol/openid-connect/certs`,
+            algorithm: "RS256" as const,
+            applicationID: audience!,
+          },
+        ]
+      : [{ domain, applicationID: audience }],
+};
