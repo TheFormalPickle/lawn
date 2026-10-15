@@ -51,7 +51,7 @@ Business assignments do not grant team membership or administrative access.
   Keep the upstream MIT license and attribution. No production deployments, real
   customer imports, billing changes or invitations without specific authorization.
 - Verify `bun run test`, `bun run typecheck`, `bun run lint` and `bun run build`.
-  Builds require the documented Convex/Clerk environment. Use owned synthetic local
+  Builds require Convex and the selected documented Clerk or Keycloak configuration. Use owned synthetic local
   data and distinguish test doubles, local backend, actual media and live providers.
 - Current scope and acceptance live in `docs/agency-workflow.md`. Monday's Assignments
   board is the intended reference; don't invent its fields when access is unavailable.
@@ -128,3 +128,22 @@ public fixture/admin identities, weakened auth, arbitrary invitations or local-d
 fallback for required NAS originals. Real service/account setup and safe access are
 prerequisites; report unmet gates plainly rather than exposing the synthetic sample.
 Jacob also explicitly encouraged subagents to meet the beta timeframe.
+
+## Current self-hosted beta
+
+October15 beta candidate acc3cab is deployed at beta.atriumsuite.com. Existing
+Atrium services remain separate. Private Keycloak sign-in uses PKCE S256 and the
+official basic default scope for immutable sub. Backend resource-token validation
+requires exact issuer, HTTPS JWKS, RS256 and API audience; never remove checks to
+resolve an integration failure. Sign-in alone is not backend readiness: preserve
+the workspace-auth gate and explicit Reconnect instead of false empty onboarding.
+
+LAWN_MEDIA_MODE=original uses private NAS-backed browser-supported originals,
+without Mux or external share controls. Preserve ETag/size/type checks and fresh
+approval after replacement. Browser PUTs are signed before the body exists; do not
+reintroduce the SDK's optional empty-body CRC32. Explicit/required checksums and
+response checks remain enabled. All originals stay on the verified dedicated NAS
+namespace; no local fallback. App/auth metadata backups are separate from originals
+and do not establish full/offsite media recovery. Team identity provisioning is
+admin-assisted, then exact-email app membership; no SMTP or automatic signup claim.
+See docs/beta-deployment.md and docs/v1-launch.md for current evidence and limits.
