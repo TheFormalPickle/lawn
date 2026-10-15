@@ -33,7 +33,8 @@ We want to make things convenient, but we don't want to be insecure. Be thoughtf
 ## Agency content workflow
 
 This fork combines assignments, review and the finished-content library for the
-agency. Keep changes small and retain Lawn's existing design and fast route loaders.
+agency. Keep changes small and retain fast route loaders. Jacob requested Atrium’s visual
+language: navy surfaces, amber action color, Geist sans-serif and restrained borders.
 The head of CMOs uses an owner/admin account to assign a producer, director/reviewer,
 CMO and deadline. Members produce assigned work; the assigned director or an admin
 reviews tracked edits. CMOs can use viewer access to retrieve approved content.
@@ -54,7 +55,9 @@ Business assignments do not grant team membership or administrative access.
 - Current scope and acceptance live in `docs/agency-workflow.md`. Monday's Assignments
   board is the intended reference; don't invent its fields when access is unavailable.
 
-Design guidance: `docs/philosophy.md` is authoritative for the retained visual language.
+Visual direction: Jacob's October 15 request to match Atrium supersedes the upstream
+cream/monospace/brutalist guidance in docs/philosophy.md. Functionality, speed,
+minimal steps and reliability take priority over decoration.
 
 ## Approved internal deployment mode
 
@@ -65,3 +68,13 @@ Subscription remains the default. This approval changes local product/configurat
 behavior; it does not authorize spending, new subscriptions, arbitrary invitations,
 production deployment or modification of Atrium. Do not present internal mode as a
 network/privacy boundary or a physical bucket quota. See docs/team-launch.md.
+
+## Workload intake and roles
+
+The Head CMO assigns a client, deliverable count, deadline and director/producer
+pair. Generate individual delivery slots atomically; do not make the Head CMO plan
+each ad. Directors plan the slots, producers mostly edit, and both film. Content
+teams are pairs within the agency workspace, not separate isolated Lawn teams.
+Keep roster setup separate from daily workload entry. Existing assignments retain
+copied owners when a pair roster changes; do not silently rewrite work. CMOs browse
+approved deliverables; the content team also needs a distinct raw-asset library.

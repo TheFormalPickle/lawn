@@ -7,6 +7,7 @@ import type { Id } from "../convex/_generated/dataModel";
 
 const modules = {
   "../convex/_generated/server.js": () => import("../convex/_generated/server"),
+  "../convex/contentBatches.ts": () => import("../convex/contentBatches"),
   "../convex/contentItems.ts": () => import("../convex/contentItems"),
   "../convex/videos.ts": () => import("../convex/videos"),
   "../convex/projects.ts": () => import("../convex/projects"),
@@ -461,4 +462,43 @@ test("stale original metadata and playback resolutions cannot overwrite a replac
   await f.t.mutation(internal.videos.setMuxPlaybackId, { videoId, muxAssetId: "old", muxPlaybackId: "old-playback" });
   const current = await f.producer.query(api.videos.get, { videoId });
   assert.equal(current.fileSize, 100); assert.equal(current.contentType, "video/mp4"); assert.equal(current.muxPlaybackId, undefined);
+});
+
+test("one client workload atomically creates its slots and exact retry never doubles the count", async () => {
+  const f=await fixture();
+  const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Team one",directorClerkId:"director",producerClerkId:"producer"});
+  const input={projectId:f.projectId,productionTeamId:pair,quantity:12,dueDate:"2026-10-30",notes:"Client workload, directors plan the individual ads.",requestKey:"batch-original",expectedActorId:"head"};
+  const id=await f.head.mutation(api.contentBatches.create,input);
+  assert.equal(await f.head.mutation(api.contentBatches.create,input),id);
+  const data=await f.head.query(api.contentItems.list,{teamId:f.teamId});assert.equal(data.items.length,12);assert.equal(data.batches.length,1);
+  for(const item of data.items){assert.equal(item.batchId,id);assert.equal(item.producerClerkId,"producer");assert.equal(item.directorClerkId,"director");assert.equal(item.dueDate,input.dueDate);}
+  await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,quantity:13}),/original workload/);
+  await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,expectedActorId:"director"}),/account changed/);
+  // A later roster change does not rewrite the saved assignment or lost reply.
+  const roster=data.productionTeams[0];await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,productionTeamId:pair,expectedUpdatedAt:roster.updatedAt,name:"Team one renamed",directorClerkId:"unassigned",producerClerkId:"producer"});
+  assert.equal(await f.head.mutation(api.contentBatches.create,input),id);
+  assert((await f.head.query(api.contentItems.list,{teamId:f.teamId})).items.every(i=>i.directorClerkId==="director"));
+});
+
+test("two content teams can receive clients independently; director planning cannot alter assignments", async () => {
+  const f=await fixture();await f.t.run(async ctx=>{for(const subject of ["director2","producer2"])await ctx.db.insert("teamMembers",{teamId:f.teamId,userClerkId:subject,userName:subject,userEmail:subject+"@example.invalid",role:"member"})});
+  const pairA=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"A",directorClerkId:"director",producerClerkId:"producer"}),pairB=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"B",directorClerkId:"director2",producerClerkId:"producer2"});
+  for(const [projectId,productionTeamId,quantity] of [[f.projectId,pairA,3],[f.secondProjectId,pairB,2]] as const)await f.head.mutation(api.contentBatches.create,{projectId,productionTeamId,quantity,dueDate:"2026-10-30",notes:"",requestKey:projectId,expectedActorId:"head"});
+  const data=await f.head.query(api.contentItems.list,{teamId:f.teamId}),item=data.items.find(i=>i.projectId===f.projectId)!;
+  await f.director.mutation(api.contentItems.plan,{itemId:item._id,expectedUpdatedAt:item.updatedAt,title:"Director's planned hook",brief:"Prep, film together, then producer edits."});
+  const planned=await f.current(item._id);assert.equal(planned?.title,"Director's planned hook");assert.equal(planned?.producerClerkId,"producer");assert.equal(planned?.dueDate,"2026-10-30");assert(planned?.plannedAt);
+  await assert.rejects(f.producer.mutation(api.contentItems.plan,{itemId:item._id,expectedUpdatedAt:planned!.updatedAt,title:"Denied",brief:""}),/assigned director/);
+  const foreign=data.items.find(i=>i.projectId===f.secondProjectId)!;await assert.rejects(f.director.mutation(api.contentItems.plan,{itemId:foreign._id,expectedUpdatedAt:foreign.updatedAt,title:"Denied",brief:""}),/assigned director/);
+  await assert.rejects(f.director.mutation(api.contentItems.plan,{itemId:item._id,expectedUpdatedAt:item.updatedAt,title:"Stale",brief:""}),/changed/);
+});
+
+test("workload bounds, dates, team identity and administrative permissions fail before creating slots", async () => {
+  const f=await fixture();const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"A",directorClerkId:"director",producerClerkId:"producer"});const input={projectId:f.projectId,productionTeamId:pair,quantity:2,dueDate:"2026-10-30",notes:"",requestKey:"new",expectedActorId:"head"};
+  for(const quantity of [0,-1,1.5,101])await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,quantity}),/between/);
+  await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,dueDate:"2026-02-30"}),/valid due date/);
+  await assert.rejects(f.producer.mutation(api.contentBatches.create,{...input,expectedActorId:"producer"}),/admin/);
+  await assert.rejects(f.cmo.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Denied",directorClerkId:"director",producerClerkId:"producer"}),/admin/);
+  await assert.rejects(f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Bad",directorClerkId:"cmo",producerClerkId:"producer"}),/editing access/);
+  assert.equal((await f.head.query(api.contentItems.list,{teamId:f.teamId})).items.length,0);
+  await f.head.mutation(api.contentBatches.create,input);await f.head.mutation(api.projects.remove,{projectId:f.projectId});assert.equal((await f.head.query(api.contentItems.list,{teamId:f.teamId})).batches.length,0);
 });

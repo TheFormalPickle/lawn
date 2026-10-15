@@ -26,6 +26,7 @@ import {
 import { useDashboardUploadContext } from "@/lib/dashboardUploadContext";
 import { triggerDownload } from "@/lib/download";
 import { videoPath } from "@/lib/routes";
+import { WorkloadIntake } from "./WorkloadIntake";
 
 type Data = FunctionReturnType<typeof api.contentItems.list>;
 type Item = Data["items"][number];
@@ -67,6 +68,7 @@ export function ContentTracker({
   const connection = useConvexConnectionState();
   const create = useMutation(api.contentItems.create);
   const update = useMutation(api.contentItems.update);
+  const plan = useMutation(api.contentItems.plan);
   const start = useMutation(api.contentItems.start);
   const link = useMutation(api.contentItems.linkVideo);
   const download = useAction(api.videoActions.getDownloadUrl);
@@ -76,6 +78,7 @@ export function ContentTracker({
   const [projectFilter, setProjectFilter] = useState("");
   const [stageFilter, setStageFilter] = useState("");
   const [mine, setMine] = useState(false);
+  const [batchFilter, setBatchFilter] = useState("");
   const [selectedId, setSelectedId] = useState<Id<"contentItems"> | null>(null);
   const selected = data?.items.find((item) => item._id === selectedId);
   const [editing, setEditing] = useState<Item | "new" | null>(null);
@@ -148,6 +151,13 @@ export function ContentTracker({
         const id = await create(pendingCreate.current);
         pendingCreate.current = null;
         setSelectedId(id);
+      } else if (!data?.canManage) {
+        await plan({
+          itemId: editing._id,
+          expectedUpdatedAt: editing.updatedAt,
+          title: input.title,
+          brief: input.brief,
+        });
       } else
         await update({
           ...input,
@@ -202,6 +212,7 @@ export function ContentTracker({
       .includes(search.toLowerCase());
   const items = data.items.filter(
     (item) =>
+      (!batchFilter || item.batchId === batchFilter) &&
       matches(item.title, item.projectId) &&
       (!stageFilter || item.stage === stageFilter) &&
       (!mine ||
@@ -209,9 +220,12 @@ export function ContentTracker({
           data.subject,
         )),
   );
+  const readyTitle = (video: Data["readyVideos"][number]) =>
+    data.items.find((item) => item.currentVideoId === video._id)?.title ??
+    video.title;
   const ready = data.readyVideos.filter(
     (video) =>
-      matches(video.title, video.projectId) &&
+      matches(`${readyTitle(video)} ${video.title}`, video.projectId) &&
       (!mine ||
         data.items.some(
           (item) =>
@@ -232,16 +246,24 @@ export function ContentTracker({
               Content tracker
             </h1>
             <p className="mt-1 text-sm text-[#888]">
-              Assign the work. Review the edit. Find the finished content.
+              Assign client workloads. Plan the ads. Review the edits. Find
+              finished content.
             </p>
           </div>
           {data.canManage && (
-            <Button
-              disabled={!connected || !data.projects.length}
-              onClick={() => openForm("new")}
-            >
-              New assignment
-            </Button>
+            <WorkloadIntake
+              data={data}
+              teamId={teamId}
+              connected={connected}
+              onCreated={(id) => {
+                setBatchFilter(id);
+                setTab("work");
+                setMine(false);
+                setSearch("");
+                setProjectFilter("");
+                setStageFilter("");
+              }}
+            />
           )}
         </div>
         <div className="mt-5 flex flex-wrap gap-2" aria-label="Content views">
@@ -261,6 +283,29 @@ export function ContentTracker({
             </Button>
           ))}
         </div>
+        {tab === "work" && data.batches.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <select
+              aria-label="Client workload"
+              className={selectClass + " sm:max-w-md"}
+              value={batchFilter}
+              onChange={(e) => setBatchFilter(e.target.value)}
+            >
+              <option value="">All client workloads</option>
+              {data.batches.map((batch) => (
+                <option key={batch._id} value={batch._id}>
+                  {projectName(batch.projectId)} · {batch.quantity} deliverables
+                  · {batch.productionTeamName} · due {batch.dueDate}
+                </option>
+              ))}
+            </select>
+            {batchFilter && (
+              <Button variant="outline" onClick={() => setBatchFilter("")}>
+                Show all work
+              </Button>
+            )}
+          </div>
+        )}
         <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(140px,1fr)_minmax(140px,220px)_minmax(120px,190px)_auto]">
           <Input
             aria-label="Search content"
@@ -330,6 +375,54 @@ export function ContentTracker({
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         {tab === "work" ? (
           <>
+            {!batchFilter && data.batches.length > 0 && (
+              <div
+                className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                aria-label="Client workloads"
+              >
+                {data.batches
+                  .filter(
+                    (batch) =>
+                      (!projectFilter || batch.projectId === projectFilter) &&
+                      (!mine ||
+                        data.items.some(
+                          (item) =>
+                            item.batchId === batch._id &&
+                            [
+                              item.producerClerkId,
+                              item.directorClerkId,
+                              item.cmoClerkId,
+                            ].includes(data.subject),
+                        )),
+                  )
+                  .map((batch) => {
+                    const slots = data.items.filter(
+                      (item) => item.batchId === batch._id,
+                    );
+                    const done = slots.filter(
+                      (item) => item.stage === "done",
+                    ).length;
+                    return (
+                      <button
+                        key={batch._id}
+                        className="min-w-0 border-2 border-[#1a1a1a] p-4 text-left hover:bg-[#e8e8e0]"
+                        onClick={() => setBatchFilter(batch._id)}
+                      >
+                        <strong className="block break-words">
+                          {projectName(batch.projectId)}
+                        </strong>
+                        <span className="mt-1 block text-sm">
+                          {batch.quantity} deliverables ·{" "}
+                          {batch.productionTeamName}
+                        </span>
+                        <span className="mt-2 block font-mono text-xs">
+                          Due {batch.dueDate} · {done} approved
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
             {items.length === 0 ? (
               <div className="border-2 border-dashed border-[#ccc] p-8">
                 <h2 className="font-bold">
@@ -341,7 +434,7 @@ export function ContentTracker({
                   {data.items.length
                     ? "Change a filter to see more work."
                     : data.projects.length
-                      ? "A team admin can add a brief, producer, director, CMO, and due date. The edit stays linked through review."
+                      ? "The Head CMO assigns a client workload. Lawn creates the slots, and directors plan the individual ads."
                       : "Create a project first, then add its content assignments here."}
                 </p>
               </div>
@@ -362,6 +455,11 @@ export function ContentTracker({
                       <p className="break-words font-bold">{item.title}</p>
                       <p className="mt-1 text-xs text-[#888]">
                         {projectName(item.projectId)}
+                        {item.batchId
+                          ? item.plannedAt
+                            ? " · Plan ready"
+                            : " · Needs planning"
+                          : ""}
                       </p>
                     </div>
                     <p className="text-sm">{name(item.producerClerkId)}</p>
@@ -404,7 +502,7 @@ export function ContentTracker({
               >
                 <p className="text-xs font-bold text-[#2d5a2d]">READY TO USE</p>
                 <h2 className="mt-2 break-words text-lg font-black">
-                  {video.title}
+                  {readyTitle(video)}
                 </h2>
                 <p className="mt-1 text-sm text-[#888]">
                   {projectName(video.projectId)}
@@ -474,7 +572,10 @@ export function ContentTracker({
                 </p>
               )}
               {selected.video && selected.video.status !== "ready" && (
-                <p role={selected.video.status === "failed" ? "alert" : "status"} className="text-sm">
+                <p
+                  role={selected.video.status === "failed" ? "alert" : "status"}
+                  className="text-sm"
+                >
                   {selected.video.status === "failed"
                     ? "This upload failed. Upload a new version to retry; it must finish processing before review."
                     : selected.video.status === "uploading"
@@ -483,13 +584,13 @@ export function ContentTracker({
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
-                {data.canManage && (
+                {(data.canManage || selected.canPlan) && (
                   <Button
                     variant="outline"
                     disabled={busy}
                     onClick={() => openForm(selected)}
                   >
-                    Edit assignment
+                    {data.canManage ? "Edit assignment" : "Plan ad"}
                   </Button>
                 )}
                 {selected.canProduce && (
@@ -600,7 +701,11 @@ export function ContentTracker({
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editing === "new" ? "New assignment" : "Edit assignment"}
+              {editing === "new"
+                ? "New assignment"
+                : data.canManage
+                  ? "Edit assignment"
+                  : "Plan ad"}
             </DialogTitle>
             <DialogDescription>
               The brief, owners, and deadline stay with the edit through review.
@@ -640,6 +745,7 @@ export function ContentTracker({
               <label className="block text-sm font-bold">
                 Brief
                 <Textarea
+                  aria-label="Brief"
                   rows={5}
                   maxLength={20000}
                   value={draft.brief}
@@ -647,48 +753,50 @@ export function ContentTracker({
                   placeholder="What are we making, for whom, and what does the edit need to deliver?"
                 />
               </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {(
-                  [
-                    ["producerClerkId", "Producer"],
-                    ["directorClerkId", "Director / reviewer"],
-                    ["cmoClerkId", "CMO"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key} className="block text-sm font-bold">
-                    {label}
-                    <select
-                      aria-label={label}
-                      className={selectClass}
-                      value={draft[key]}
-                      onChange={(event) => field(key, event.target.value)}
-                    >
-                      <option value="">Unassigned</option>
-                      {data.members
-                        .filter(
-                          (member) =>
-                            key === "cmoClerkId" || member.role !== "viewer",
-                        )
-                        .map((member) => (
-                          <option
-                            key={member.userClerkId}
-                            value={member.userClerkId}
-                          >
-                            {member.userName}
-                          </option>
-                        ))}
-                    </select>
+              {data.canManage && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(
+                    [
+                      ["producerClerkId", "Producer"],
+                      ["directorClerkId", "Director / reviewer"],
+                      ["cmoClerkId", "CMO"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="block text-sm font-bold">
+                      {label}
+                      <select
+                        aria-label={label}
+                        className={selectClass}
+                        value={draft[key]}
+                        onChange={(event) => field(key, event.target.value)}
+                      >
+                        <option value="">Unassigned</option>
+                        {data.members
+                          .filter(
+                            (member) =>
+                              key === "cmoClerkId" || member.role !== "viewer",
+                          )
+                          .map((member) => (
+                            <option
+                              key={member.userClerkId}
+                              value={member.userClerkId}
+                            >
+                              {member.userName}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  ))}
+                  <label className="block text-sm font-bold">
+                    Due date
+                    <Input
+                      type="date"
+                      value={draft.dueDate}
+                      onChange={(event) => field("dueDate", event.target.value)}
+                    />
                   </label>
-                ))}
-                <label className="block text-sm font-bold">
-                  Due date
-                  <Input
-                    type="date"
-                    value={draft.dueDate}
-                    onChange={(event) => field("dueDate", event.target.value)}
-                  />
-                </label>
-              </div>
+                </div>
+              )}
             </fieldset>
             {formError && (
               <p role="alert" className="text-sm text-red-700">
@@ -716,7 +824,9 @@ export function ContentTracker({
                   ? "Saving…"
                   : pendingCreate.current
                     ? "Confirm assignment"
-                    : "Save assignment"}
+                    : data.canManage
+                      ? "Save assignment"
+                      : "Save plan"}
               </Button>
             </div>
           </form>

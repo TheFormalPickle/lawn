@@ -59,7 +59,23 @@ export default defineSchema({
     description: v.optional(v.string()),
   }).index("by_team", ["teamId"]),
 
+  productionTeams: defineTable({
+    teamId: v.id("teams"), name: v.string(),
+    directorClerkId: v.string(), producerClerkId: v.string(), updatedAt: v.number(),
+  }).index("by_team", ["teamId"]),
+
+  contentBatches: defineTable({
+    teamId: v.id("teams"), projectId: v.id("projects"),
+    productionTeamId: v.id("productionTeams"), productionTeamName: v.string(),
+    quantity: v.number(), dueDate: v.string(), notes: v.string(),
+    createdByClerkId: v.string(), requestKey: v.string(), requestSignature: v.string(),
+  }).index("by_team", ["teamId"]).index("by_project", ["projectId"])
+    .index("by_creator_request", ["teamId", "createdByClerkId", "requestKey"]),
+
   contentItems: defineTable({
+    batchId: v.optional(v.id("contentBatches")),
+    plannedAt: v.optional(v.number()),
+    sequence: v.optional(v.number()),
     teamId: v.id("teams"),
     projectId: v.id("projects"),
     title: v.string(),

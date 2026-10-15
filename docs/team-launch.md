@@ -49,7 +49,8 @@ do not switch a live paid customer deployment without reconciling its billing.
 6. Set internal mode and its cap, then run `bun run dev`. Open the normal app at
    localhost:5296/dashboard and sign in with the actual Clerk test accounts. The
    synthetic identity chooser at port5297 is excluded from Git and deployment.
-7. Create one test client/project and assignment, upload generated noncustomer
+7. Create test clients/projects, set up the two content-team pairs and assign a
+   client/count/due-date workload. Let its director plan a slot; upload generated noncustomer
    footage, request a revision, upload the revised edit, approve as director and
    retrieve it as a CMO. Check actual playback and original-file byte equality;
    verify producer/CMO approval denial and failed upload recovery. Compare this to

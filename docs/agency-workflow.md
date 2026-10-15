@@ -8,14 +8,17 @@ future work.
 
 - Keep existing Lawn teams and projects. Use a project for a client or campaign;
   the tracker shows the project context alongside every assignment.
-- The head of CMOs uses owner/admin access to create assignments and select a
-  producer, director/reviewer, CMO, deadline and brief. Business assignments refer
-  to existing team members; they do not create accounts or grant privileges.
-- Assigned producers/directors can start work, upload an edit, or attach an existing
-  project video. A new upload uses Lawn's existing upload and processing pipeline.
+- The Head CMO selects a client/project, deliverable count, due date and content
+  team. A single atomic request generates the slots; no per-ad entry is required.
+  Content teams are director/producer pairs configured once within the workspace.
+- Assigned directors plan each slot’s title and brief. Producers mostly edit;
+  both roles can start work and upload footage/edits. The director cannot change
+  assignment owners/deadlines through the planning API. Admin edits retain their
+  existing authority. A roster change affects new requests; existing work keeps
+  its saved assigned people until explicitly edited.
 - The existing video review status is authoritative: Review, Rework and Done map
-  to In review, Changes requested and Ready to use. Assigned directors and admins
-  review tracked work. Existing untracked videos retain member review permissions.
+  to In review, Changes requested and Ready to use. Assigned directors/admins review
+  tracked edits. Existing untracked videos retain member review permissions.
 - CMOs can have viewer access. Ready to use includes current, playable, approved
   edits and existing approved untracked videos. Earlier tracked versions stay out.
   Download requests recheck approval/current-version eligibility on the server.
@@ -51,7 +54,7 @@ They must never be deployed or copied into production.
 
 ## Verification and remaining acceptance
 
-The regression suite passes 22 tests across five files. It exercises Convex
+The regression suite passes 25 tests across five files. It exercises Convex
 handlers against an in-memory test backend: roles, cross-team/project linking,
 create replay identity, current-version approval, stale edits, deletion cleanup,
 existing-video compatibility and same-ID original-file replacement.
@@ -114,12 +117,24 @@ See [the first-install checklist](team-launch.md); no cloud accounts, paid servi
 or production deployment have been created. The exact hosted Clerk sign-in and
 real media integrations remain unverified.
 
-## Workload assignment clarification
+## Client workloads and director planning
 
-The Head CMO assigns a client, deliverable count, deadline and a director/producer
-team; they should not create each ad slot. Directors plan the ads, producers mostly
-edit, and both film. Approved deliverables go to CMOs. The initial one-at-a-time
-assignment form is a verified local foundation, not the final workload intake.
-Client workload generation and content-team planning are the next implementation.
-Raw assets and approved deliverables need distinct browsing paths; no Atrium data
-or services are being connected during this adaptation.
+The Head CMO's client/count/due/team request creates 1–100 slots in one mutation.
+An exact actor-bound receipt prevents duplicate batches after a lost reply; the
+original pending request survives refresh in session storage and requires explicit
+confirmation. No auto-save/replay occurs. This is per-browser-tab recovery, not
+cross-device durability. Changing the original payload cannot replay its key.
+
+The actual two-team/two-client local workflow passed: five slots generated from
+two requests; one committed reply suppressed then page refreshed and confirmed
+without duplicates; own-team director planning; foreign-team/producer denial;
+producer upload; actual playback and saved review comment; director approval;
+CMO exact original download. The finished library uses the planned deliverable
+name instead of an opaque export filename. Head/producer/director/CMO all use the
+same saved work. Filled brief fields have explicit accessible labels. Workload
+and deliverable views use the same My work filter scope.
+
+Raw video/photo/audio browsing remains a separate next milestone. The user’s
+workflow definition is authoritative; Monday’s unavailable board reader does not
+block this implementation or imply an import. No Atrium services/data are linked.
+Atrium's checked design-system source/screens are a read-only style reference.

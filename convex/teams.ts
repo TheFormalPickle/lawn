@@ -397,6 +397,9 @@ export const deleteTeam = mutation({
       );
     }
 
+    for (const table of ["contentBatches", "productionTeams"] as const)
+      for (const row of await ctx.db.query(table).withIndex("by_team", q => q.eq("teamId", args.teamId)).collect()) await ctx.db.delete(row._id);
+
     // Delete all team members
     const members = await ctx.db
       .query("teamMembers")

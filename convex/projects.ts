@@ -127,6 +127,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     await requireProjectAccess(ctx, args.projectId, "admin");
 
+    for (const batch of await ctx.db.query("contentBatches").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect()) await ctx.db.delete(batch._id);
     // Delete all videos in the project
     const videos = await ctx.db
       .query("videos")

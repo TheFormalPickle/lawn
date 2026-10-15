@@ -6,6 +6,7 @@ import { requireProjectAccess, requireTeamAccess } from "./auth";
 import {
   canManageContent,
   canProduceContent,
+  canReviewContent,
   contentStage,
 } from "./contentWorkflow";
 
@@ -17,7 +18,7 @@ const fields = {
   cmoClerkId: v.optional(v.string()),
   dueDate: v.optional(v.string()),
 };
-async function validateFields(
+export async function validateFields(
   ctx: MutationCtx,
   teamId: Id<"teams">,
   input: {
@@ -65,7 +66,7 @@ export const list = query({
   args: { teamId: v.id("teams") },
   handler: async (ctx, { teamId }) => {
     const { user, membership } = await requireTeamAccess(ctx, teamId);
-    const [items, projects, members] = await Promise.all([
+    const [items, projects, members, productionTeams, batches] = await Promise.all([
       ctx.db
         .query("contentItems")
         .withIndex("by_team", (q) => q.eq("teamId", teamId))
@@ -78,6 +79,8 @@ export const list = query({
         .query("teamMembers")
         .withIndex("by_team", (q) => q.eq("teamId", teamId))
         .collect(),
+      ctx.db.query("productionTeams").withIndex("by_team", q => q.eq("teamId", teamId)).collect(),
+      ctx.db.query("contentBatches").withIndex("by_team", q => q.eq("teamId", teamId)).collect(),
     ]);
     const videos = (
       await Promise.all(
@@ -94,6 +97,7 @@ export const list = query({
     return {
       canManage: canManageContent(membership.role),
       subject: user.subject,
+      productionTeams, batches: batches.sort((a,b) => b._creationTime-a._creationTime),
       projects,
       members: members.map(({ userClerkId, userName, role }) => ({
         userClerkId,
@@ -115,11 +119,13 @@ export const list = query({
             stage: contentStage(item, exact),
             video: exact,
             canProduce: canProduceContent(item, user.subject, membership.role),
+            canPlan: canReviewContent(item, user.subject, membership.role),
           };
         })
         .sort(
           (a, b) =>
             (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") ||
+            (a.batchId && a.batchId === b.batchId ? (a.sequence ?? 0) - (b.sequence ?? 0) : 0) ||
             b._creationTime - a._creationTime,
         ),
       // Existing approved videos remain discoverable. Earlier tracked versions
@@ -301,7 +307,21 @@ export const getReadyVideo = query({
         throw new ConvexError(
           "A newer edit replaced this version. Use the current approved edit.",
         );
+      return { ...video, title: item.title };
     }
     return video;
+  },
+});
+
+export const plan = mutation({
+  args: { itemId: v.id("contentItems"), expectedUpdatedAt: v.number(), title: v.string(), brief: v.string() },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.itemId);
+    if (!item) throw new ConvexError("Assignment not found.");
+    const {user,membership} = await requireTeamAccess(ctx,item.teamId,"member");
+    if (!canReviewContent(item,user.subject,membership.role)) throw new ConvexError("Only the assigned director or an administrator can plan this ad.");
+    if (item.updatedAt !== args.expectedUpdatedAt) throw new ConvexError("This assignment changed. Reopen it to use the latest details.");
+    const data = await validateFields(ctx,item.teamId,{ title:args.title,brief:args.brief });
+    await ctx.db.patch(item._id,{ title:data.title,brief:data.brief,plannedAt:Date.now(),updatedAt:Math.max(Date.now(),item.updatedAt+1) });
   },
 });
