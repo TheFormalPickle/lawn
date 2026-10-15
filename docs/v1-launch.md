@@ -5,7 +5,7 @@ claim that production acceptance or hosting setup is already complete.
 
 ## Scope for the first release
 
-Lawn is the clean foundation for a future Atrium. V1 stays focused on the agency's
+The Lawn-based build is now branded Atrium. V1 stays focused on the agency's
 content work. Keep the Atrium visual language; do not port its analytics, agents,
 integrations, services or historical data to meet this deadline.
 
@@ -47,7 +47,9 @@ Before production, record evidence for:
 1. **Deployment arrangement.** Office mini PC OS, resources, secure administrative
    access, service supervision, TLS and the intended use of atriumsuite.com. The
    current app still needs Convex, Clerk, S3-compatible storage and Mux; hosting its
-   web process locally does not replace them. A NAS share is not an S3 endpoint.
+   web process locally does not replace them. All media originals must live on
+   TrueNAS; a NAS share is not an S3 endpoint. Inventory existing storage before
+   organizing a dedicated managed area; see [nas-storage.md](nas-storage.md).
    Read-only SSH now verifies Debian12 and available local capacity. Existing
    services must be preserved; the observed unsynchronized clock needs correction
    and verification during supervised host preparation.
@@ -66,3 +68,14 @@ No DNS, NAS, existing Atrium services, paid services or production configuration
 have been changed by this plan. A deadline does not turn local fixture evidence
 into production readiness. Continue fixing verified v1 defects while deployment
 details are established.
+
+## Expected daily interactions
+
+Edits can be dropped directly onto an assignment or its open details. The existing
+upload/processing/review state advances automatically; there is no Start work
+prerequisite. Raw-library drops retain the selected client scope and use the same
+recoverable queue as the file picker. Source previews return to the same assignment.
+Current local built acceptance covers real saved synthetic bytes, replacement
+approval invalidation, uncertain confirmation retry and role denial at desktop and
+390px widths. It does not establish native OS drag behavior, real Clerk sign-in,
+live media providers or NAS persistence. Those still belong in launch rehearsal.

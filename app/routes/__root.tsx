@@ -18,20 +18,18 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "lawn — video review for creative teams" },
+      { title: "Atrium — content workspace" },
       {
         name: "description",
         content:
-          "Video review and collaboration for creative teams. Frame-accurate comments, unlimited seats, $5/month flat. The open source Frame.io alternative.",
+          "Client assignments, creative review and a shared content library for the agency.",
       },
-      { property: "og:site_name", content: "lawn" },
-      { name: "twitter:site", content: "@theo" },
+      { property: "og:site_name", content: "Atrium" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/svg+xml", href: "/grass-logo.svg?v=4" },
-      { rel: "icon", type: "image/x-icon", href: "/favicon.ico?v=4" },
-      { rel: "shortcut icon", href: "/favicon.ico?v=4" },
+      { rel: "icon", type: "image/png", href: "/atrium-logo.png" },
+      { rel: "shortcut icon", href: "/atrium-logo.png" },
       { rel: "preconnect", href: "https://stream.mux.com", crossOrigin: "anonymous" },
       { rel: "preconnect", href: "https://image.mux.com", crossOrigin: "anonymous" },
       { rel: "dns-prefetch", href: "//stream.mux.com" },

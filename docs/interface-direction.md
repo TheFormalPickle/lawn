@@ -1,6 +1,6 @@
-# Lawn interface direction
+# Atrium interface direction (Lawn foundation)
 
-Jacob requested Atrium’s style with fewer steps, while keeping Lawn standalone.
+Jacob requested Atrium’s name and style with fewer steps, using Lawn as a standalone foundation.
 Use Atrium’s checked web design tokens and the generated concept at
 `outputs/lawn-style-concept-v1.png` in the parent workspace as visual references.
 The image is a concept, not application evidence.
@@ -43,15 +43,15 @@ Fresh built tracker components were inspected at the concept dimensions
 preserved Jacob’s active preview. Both the concept and current renders were opened
 as images, rather than accepting DOM assertions alone.
 
-| Comparison | Result and intentional differences |
-| --- | --- |
-| Palette | Atrium navy page/panels and amber action; green reserved for approval. Light mode retains readable surfaces and controls. |
-| Typography | Locally loaded Geist; measured primary action 14px/500, 12px radius. Monospace is limited to existing technical/time displays. |
-| Navigation | Desktop rail becomes horizontal on phones. Two live destinations; Content teams remains secondary dialog setup. |
-| Workload layout | Compact rows replace cards, with real client/count/team/due/approved values. Selecting a row scopes the delivery slots. |
-| Deliverables | Rows keep owner/stage/due and existing details/actions. Phone layout stacks without sideways scrolling. |
-| Controls/dialogs | Thin borders, rounded controls, visible focus, no offset shadows or moving input fields. Intake fits 390px. |
-| Copy | Content tracker, Assign client workload, Assignments, Ready to use, Workload overview and Deliverables match the inventory. No generated greeting or fake user footer. Actual client/owner labels replace illustration data. |
+| Comparison       | Result and intentional differences                                                                                                                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Palette          | Atrium navy page/panels and amber action; green reserved for approval. Light mode retains readable surfaces and controls.                                                                                                    |
+| Typography       | Locally loaded Geist; measured primary action 14px/500, 12px radius. Monospace is limited to existing technical/time displays.                                                                                               |
+| Navigation       | Desktop rail becomes horizontal on phones. Two live destinations; Content teams remains secondary dialog setup.                                                                                                              |
+| Workload layout  | Compact rows replace cards, with real client/count/team/due/approved values. Selecting a row scopes the delivery slots.                                                                                                      |
+| Deliverables     | Rows keep owner/stage/due and existing details/actions. Phone layout stacks without sideways scrolling.                                                                                                                      |
+| Controls/dialogs | Thin borders, rounded controls, visible focus, no offset shadows or moving input fields. Intake fits 390px.                                                                                                                  |
+| Copy             | Content tracker, Assign client workload, Assignments, Ready to use, Workload overview and Deliverables match the inventory. No generated greeting or fake user footer. Actual client/owner labels replace illustration data. |
 
 The initial extra All client workloads selector duplicated the overview; it now
 appears only inside an active workload scope. Dates remain exact stored calendar
@@ -81,3 +81,35 @@ CMOs start in Ready to use. Raw list, decoded photo, missing-source recovery and
 approved-download recovery were inspected at1440/390 alongside the existing style.
 The original two-destination concept predates the user’s explicit raw-library scope;
 this third live destination is an intentional functional extension.
+
+## Atrium identity and second design pass
+
+The earlier fidelity ledger describes an initial implementation, not Jacob's
+acceptance. On October15 he requested the Atrium name and a closer match to the
+actual interface, plus expected file-drop behavior. The current concept is the
+parent outputs/atrium-content-shell-concept-v2.png, generated with the built-in
+image tool using the actual Atrium Work screenshot and the current library as
+references. Its prompt is preserved in the chat's image-generation call.
+
+Inventory: actual existing teal Atrium logo, Geist, navy/amber tokens, inset rounded
+sidebar and main workspace, compact headers, one responsive filter group, client
+workload rows and deliverable rows. Only Assignments, Ready to use and Raw assets
+belong in navigation. Reuse identity assets only; no old Atrium services were copied.
+Real saved clients/owners/dates replace the concept's invented people-as-clients
+and 2025 dates. No inert View all action or decorative client avatars were added.
+The existing workspace breadcrumb/auth utility header remains; the local preview
+has an extra conspicuous synthetic-role strip, which is not production chrome.
+
+The legacy public sales pages are superseded by entry into the authenticated
+workspace. Their old URLs remain resolvable; they no longer advertise subscriptions,
+trials or Frame.io comparisons as the agency's product. Server billing contracts,
+MIT attribution and OFL are unchanged. Theme and pending-request storage keys retain
+their original names to preserve existing choices and confirmation recovery.
+
+File drop is functional: one edit on an assignment row or open detail routes to
+that slot and automatically enters production/review. A source drop in Raw assets
+uses its selected client. Invalid/unauthorized drops create no videos; local targets
+cannot also dispatch the global uploader. Source preview offers Back to assignment
+and restores the same selection/filter. Check the actual built workflow and desktop,
+phone and light theme before treating this pass as accepted. Real Clerk rendering
+and native OS drag/drop remain separate from synthetic browser acceptance.

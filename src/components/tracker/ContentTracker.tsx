@@ -4,7 +4,7 @@ import {
   useMutation,
   useQuery,
 } from "convex/react";
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type DragEvent } from "react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ConvexError } from "convex/values";
@@ -27,6 +27,8 @@ import { useDashboardUploadContext } from "@/lib/dashboardUploadContext";
 import { triggerDownload } from "@/lib/download";
 import { videoPath } from "@/lib/routes";
 import { ListTodo, FolderCheck, ChevronRight, Library } from "lucide-react";
+import { hasFileDrop, isVideoFile } from "@/lib/useGlobalFileDrop";
+import { Brand } from "@/components/Brand";
 import { WorkloadIntake } from "./WorkloadIntake";
 import { RawAssetLibrary } from "@/components/assets/RawAssetLibrary";
 
@@ -71,14 +73,21 @@ export function ContentTracker({
   const update = useMutation(api.contentItems.update);
   const plan = useMutation(api.contentItems.plan);
   const detachSource = useMutation(api.rawAssets.detachFromAssignment);
-  const start = useMutation(api.contentItems.start);
   const link = useMutation(api.contentItems.linkVideo);
   const download = useAction(api.videoActions.getDownloadUrl);
   const { requestUpload } = useDashboardUploadContext();
   const [tab, setTab] = useState<"work" | "library" | "raw" | null>(null);
   const [rawOpened, setRawOpened] = useState(false);
   const [rawFocus, setRawFocus] = useState<Id<"rawAssets"> | null>(null);
-  const openRaw = (id: Id<"rawAssets"> | null = null) => {
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [sourceOrigin, setSourceOrigin] = useState<Id<"contentItems"> | null>(
+    null,
+  );
+  const openRaw = (
+    id: Id<"rawAssets"> | null = null,
+    origin: Id<"contentItems"> | null = null,
+  ) => {
+    setSourceOrigin(origin);
     setRawOpened(true);
     setRawFocus(id);
     setSelectedId(null);
@@ -102,6 +111,40 @@ export function ContentTracker({
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState("");
   const connected = connection.isWebSocketConnected;
+  const receiveEdit = (item: Item, event: DragEvent<HTMLElement>) => {
+    if (!hasFileDrop(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDropTarget(null);
+    if (!connected) {
+      setError("Reconnect before uploading this edit.");
+      return;
+    }
+    if (!item.canProduce) {
+      setError(
+        "Only the assigned content team or an administrator can upload this edit.",
+      );
+      return;
+    }
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length !== 1 || !isVideoFile(files[0])) {
+      setError(
+        "Drop one video edit onto this assignment. Use Raw assets for source video, photos and audio.",
+      );
+      return;
+    }
+    setError(null);
+    requestUpload(files, item.projectId, item._id);
+  };
+  const dragEdit = (item: Item, event: DragEvent<HTMLElement>) => {
+    if (!hasFileDrop(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect =
+      item.canProduce && connected ? "copy" : "none";
+    setDropTarget(item._id);
+  };
+
   const openForm = (item: Item | "new") => {
     const next =
       item === "new"
@@ -254,7 +297,9 @@ export function ContentTracker({
   return (
     <div className="agency-shell">
       <nav className="agency-nav" aria-label="Content views">
-        <p className="agency-nav-label">Lawn</p>
+        <div className="agency-nav-label">
+          <Brand />
+        </div>
         <button
           type="button"
           aria-pressed={activeTab === "work"}
@@ -298,7 +343,7 @@ export function ContentTracker({
                   ? "Find source material. Preview it. Use it in the next edit."
                   : activeTab === "library"
                     ? "Approved originals, ready for your client accounts."
-                    : "Assign client workloads. Directors plan the ads."}
+                    : "Plan, produce and review client deliverables."}
               </p>
             </div>
             {data.canManage && activeTab === "work" && (
@@ -342,8 +387,9 @@ export function ContentTracker({
             </div>
           )}
           {activeTab !== "raw" && (
-            <div className="agency-panel mt-5 grid items-center gap-3 p-4 lg:grid-cols-[minmax(140px,1fr)_minmax(140px,190px)_minmax(120px,160px)_auto]">
+            <div className="agency-panel mt-5 grid grid-cols-2 items-center gap-3 p-4 lg:grid-cols-[minmax(140px,1fr)_minmax(140px,190px)_minmax(120px,160px)_auto]">
               <Input
+                className="col-span-2 lg:col-span-1"
                 aria-label="Search content"
                 placeholder="Search content or clients…"
                 value={search}
@@ -381,7 +427,7 @@ export function ContentTracker({
                   Approved, current versions only
                 </p>
               )}
-              <label className="flex items-center gap-2 text-sm">
+              <label className="col-span-2 flex items-center gap-2 text-sm lg:col-span-1">
                 <input
                   type="checkbox"
                   checked={mine}
@@ -420,7 +466,7 @@ export function ContentTracker({
                   className="agency-panel mb-6"
                   aria-label="Client workloads"
                 >
-                  <h2 className="agency-section-title">Workload overview</h2>
+                  <h2 className="agency-section-title">Client workloads</h2>
                   {data.batches
                     .filter(
                       (batch) =>
@@ -484,7 +530,7 @@ export function ContentTracker({
                     {data.items.length
                       ? "Change a filter to see more work."
                       : data.projects.length
-                        ? "The Head CMO assigns a client workload. Lawn creates the slots, and directors plan the individual ads."
+                        ? "The Head CMO assigns a client workload. Atrium creates the slots, and directors plan the individual ads."
                         : "Create a project first, then add its content assignments here."}
                   </p>
                 </div>
@@ -503,6 +549,11 @@ export function ContentTracker({
                   {items.map((item) => (
                     <button
                       key={item._id}
+                      data-file-drop="assignment"
+                      data-dragging={dropTarget === item._id}
+                      onDragOver={(e) => dragEdit(item, e)}
+                      onDragLeave={() => setDropTarget(null)}
+                      onDrop={(e) => receiveEdit(item, e)}
                       type="button"
                       className="grid w-full items-center gap-3 border-t border-line px-5 py-4 text-left hover:bg-[var(--surface-alt)] sm:grid-cols-[minmax(0,2fr)_minmax(100px,1fr)_minmax(120px,1fr)_120px]"
                       onClick={() => {
@@ -515,6 +566,11 @@ export function ContentTracker({
                         <p className="break-words text-sm font-medium">
                           {item.title}
                         </p>
+                        {item.canProduce && (
+                          <span className="mt-1 block text-xs text-muted">
+                            Drop {item.video ? "a new version" : "an edit"} here
+                          </span>
+                        )}
                         <p className="mt-1 text-xs text-[#888]">
                           {projectName(item.projectId)}
                           {item.batchId
@@ -600,7 +656,15 @@ export function ContentTracker({
             data={data}
             active={activeTab === "raw"}
             focusedId={rawFocus}
-            onFocus={setRawFocus}
+            onFocus={(id) => {
+              setRawFocus(id);
+              if (!id && sourceOrigin) {
+                setTab("work");
+                setSelectedId(sourceOrigin);
+                setSourceOrigin(null);
+              }
+            }}
+            returnLabel={sourceOrigin ? "Back to assignment" : undefined}
             initialScope={projectFilter}
           />
         )}
@@ -611,7 +675,14 @@ export function ContentTracker({
           if (!open && !busy) setSelectedId(null);
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent
+          className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+          data-file-drop="assignment"
+          data-dragging={dropTarget === selected?._id}
+          onDragOver={(e) => selected && dragEdit(selected, e)}
+          onDragLeave={() => setDropTarget(null)}
+          onDrop={(e) => selected && receiveEdit(selected, e)}
+        >
           <DialogHeader>
             <DialogTitle>{selected?.title}</DialogTitle>
             <DialogDescription>
@@ -649,7 +720,7 @@ export function ContentTracker({
                         type="button"
                         disabled={!source.available}
                         className="min-w-0 break-words text-left text-sm text-[var(--accent)] underline-offset-4 hover:underline disabled:text-muted"
-                        onClick={() => openRaw(source._id)}
+                        onClick={() => openRaw(source._id, selected._id)}
                       >
                         {source.filename}
                       </button>
@@ -704,16 +775,10 @@ export function ContentTracker({
                 )}
                 {selected.canProduce && (
                   <>
-                    {selected.stage === "planned" && (
-                      <Button
-                        disabled={busy || !connected}
-                        onClick={() =>
-                          void act(() => start({ itemId: selected._id }))
-                        }
-                      >
-                        Start work
-                      </Button>
-                    )}
+                    <p className="basis-full text-sm text-muted">
+                      Drop one video here to upload this edit. Its status
+                      follows the upload and review automatically.
+                    </p>
                     <label
                       className={`cursor-pointer rounded-xl border border-line px-3 py-2 text-sm font-medium ${busy || !connected ? "opacity-50" : "hover:bg-[#e8e8e0]"}`}
                     >

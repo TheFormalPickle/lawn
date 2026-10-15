@@ -1,6 +1,6 @@
 # Agency content workflow
 
-Lawn is the clean foundation for a future Atrium rebuild. The immediate scope is
+This Lawn-based build is branded Atrium, a clean standalone foundation. Its scope is
 one content workflow: client workloads, planning, production, review, raw sources
 and approved retrieval. Keep it standalone for now. Reuse Atrium’s visual language;
 do not port its old subsystems, agents, analytics or data wholesale.
@@ -244,3 +244,21 @@ catalog polling, controlled503/exact-client retry, unchanged open decoded previe
 replay/removal and a completed newer-revision page rejected while preserving the
 loaded50. The existing62-record/actual60-second expiry/paging recovery also passes.
 This is local synthetic-auth/loopback-storage evidence, not live provider proof.
+
+## Expected file interactions
+
+A producer/director can drop one video on an assigned deliverable row or its open
+details; the existing upload manager creates the exact current edit and advances
+its production state. No Start work step is needed. Raw-library drops accept
+multiple supported sources using the selected client and the same recovery queue
+as the file picker. A local drop never also routes to the global project uploader;
+invalid multiple/photo edit drops and CMO edit drops save nothing. Upload controls
+remain as keyboard/touch alternatives. Uploading a replacement still removes the
+old current version from approved retrieval until the new edit is reviewed.
+
+The actual built browser acceptance covers these drops using generated real file
+bytes in DOM DataTransfer objects, saved records, processing, decoded playback,
+confirmation-loss retry without another PUT, replacement approval gating, raw
+client ownership and source-return context. It does not claim manual native OS
+file dragging or real authentication/provider acceptance. See the interface ledger
+for the Atrium identity pass and nas-storage.md for the physical storage requirement.

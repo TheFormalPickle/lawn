@@ -116,3 +116,12 @@ host-preparation step before real authentication or signed-media acceptance; do
 not compensate by weakening token/signature checks. Both rely on valid time:
 [Clerk verification](https://clerk.com/docs/reference/backend/verify-token) and
 [S3 signed URLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html).
+
+## Confirmed NAS requirement
+
+The October15 follow-up requires NAS-backed media and permits NAS/mini-PC readiness
+investigation and organization preparation. Follow [nas-storage.md](nas-storage.md)
+for the dedicated namespace, existing-file mapping and outage/restore acceptance.
+Do not substitute the mini PC's free SSD capacity for this requirement. The user
+clarified the NAS had been powered off and is now booting; identify its actual
+online service before attributing an outage to application code or changing mounts.

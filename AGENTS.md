@@ -92,7 +92,12 @@ review, raw sources and approved deliverables. Reuse visual style, not old agent
 analytics, background services or customer data. Add future capabilities only when
 separately requested and justified. Intended hosting is an office mini PC on the
 NAS switch, using atriumsuite.com. This is direction, not deployment authority.
-Do not change that domain, office network, NAS mounts or current Atrium services.
+Do not change that domain or current Atrium services during application development.
+October15 follow-up authorizes NAS/mini-PC readiness investigation and organization
+preparation: identify TrueNAS and its healthy pool first, preserve existing files,
+and use a dedicated owned namespace for any eventual test writes. No broad moves,
+deletes, pool upgrades or repair guesses. All media originals must reside on NAS;
+never silently fall back to mini-PC disk. See docs/nas-storage.md.
 The ignored synthetic preview is never a production/shared-team deployment.
 
 V1 production target is Friday, October 23, 2026. Prioritize the content workflow,
@@ -105,3 +110,11 @@ and a closer match to Atrium's actual interface before going online. Prior visua
 checks are historical milestones, not his design acceptance. Keep source identity,
 roles, pending requests and saved theme preferences during the rebrand. The domain
 is open in Safari for later setup; no DNS or production action was requested.
+
+Expected interactions are acceptance criteria: dropping an edit onto its assignment
+must route to that exact client/item and advance through the existing upload/review
+state without a Start work prerequisite. Raw-library drops retain client scope and
+reuse the same receipt queue as the picker. Optional buttons remain accessible.
+Local drop targets must prevent duplicate global routing and clear drag feedback.
+Preserve review permissions, replacement approval invalidation and source/draft
+context while reducing steps. Check the real path, not just styling or callbacks.

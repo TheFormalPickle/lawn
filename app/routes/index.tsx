@@ -5,11 +5,11 @@ import Homepage from "./-home";
 export const Route = createFileRoute("/")({
   head: () =>
     seoHead({
-      title: "lawn — video review for creative teams",
+      title: "Atrium — content workspace",
       description:
-        "Video review and collaboration for creative teams. Frame-accurate comments, unlimited seats, $5/month flat. The open source Frame.io alternative.",
+        "Client assignments, creative review and a shared content library for the agency.",
       path: "/",
-      ogImage: "/og/home.png",
+      noIndex: true,
     }),
   component: Homepage,
 });

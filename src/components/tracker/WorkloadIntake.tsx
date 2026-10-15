@@ -213,7 +213,7 @@ export function WorkloadIntake({
             <DialogDescription>
               {mode === "teams"
                 ? "Set up director/producer pairs once. Existing work keeps its assigned people when a roster changes."
-                : "Choose the client, count, deadline and team. Lawn creates the delivery slots; directors plan each ad."}
+                : "Choose the client, count, deadline and team. Atrium creates the delivery slots; directors plan each ad."}
             </DialogDescription>
           </DialogHeader>
           {mode === "request" ? (

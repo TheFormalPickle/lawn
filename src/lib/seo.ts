@@ -1,7 +1,6 @@
-const SITE_URL = "https://lawn.video";
-const SITE_NAME = "lawn";
-const DEFAULT_OG_IMAGE = "/og/default.png";
-const TWITTER_HANDLE = "@theo";
+const SITE_URL = "https://atriumsuite.com";
+const SITE_NAME = "Atrium";
+const DEFAULT_OG_IMAGE = "/atrium-logo.png";
 
 type SeoOptions = {
   title: string;
@@ -20,9 +19,9 @@ export function seoHead({
   type = "website",
   noIndex = false,
 }: SeoOptions) {
-  const fullTitle = title.toLowerCase().includes("lawn")
+  const fullTitle = title.toLowerCase().includes("atrium")
     ? title
-    : `${title} | lawn`;
+    : `${title} | Atrium`;
   const url = `${SITE_URL}${path}`;
   const imageUrl = ogImage.startsWith("http")
     ? ogImage
@@ -43,7 +42,6 @@ export function seoHead({
     { name: "twitter:title", content: fullTitle },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: imageUrl },
-    { name: "twitter:site", content: TWITTER_HANDLE },
   ];
 
   if (noIndex) {

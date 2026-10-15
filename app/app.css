@@ -340,26 +340,16 @@ body {
   padding: 9px 12px;
   font: 400 14px/20px 'Geist', system-ui, sans-serif;
 }
-.agency-shell { display: flex; flex: 1; min-height: 0; }
-.agency-nav {
-  flex: 0 0 200px;
-  padding: 28px 16px;
-  border-right: 1px solid var(--border-subtle);
-  background: var(--surface);
-}
-.agency-nav-label { margin: 0 12px 24px; font-size: 20px; font-weight: 650; }
-.agency-nav button {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; padding: 12px; margin-bottom: 5px;
-  border-radius: 12px; text-align: left; font-size: 14px;
-  color: var(--foreground-muted); cursor: pointer;
-}
+.agency-shell { display: flex; flex: 1; min-height: 0; gap: 12px; padding: 12px; }
+.agency-nav { flex: 0 0 264px; padding: 22px 12px; border: 1px solid var(--border-subtle); border-radius: 24px; background: linear-gradient(140deg, var(--surface), var(--background)); }
+.agency-nav-label { margin: 0 16px 30px; }
+.agency-nav button { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; margin-bottom: 5px; padding: 11px 14px; border-radius: 18px; text-align: left; font-size: 14px; color: var(--foreground-muted); cursor: pointer; }
 .agency-nav button:hover { background: var(--surface-alt); color: var(--foreground); }
 .agency-nav button[aria-pressed="true"] {
   color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.agency-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.agency-panel { border: 1px solid var(--border-subtle); border-radius: 18px; background: var(--surface); overflow: hidden; }
+.agency-main { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: 24px; background: var(--background); overflow: hidden; }
+.agency-panel { border: 1px solid var(--border-subtle); border-radius: 20px; background: var(--surface); overflow: hidden; }
 .agency-section-title { padding: 18px 20px; font-size: 16px; font-weight: 600; }
 .agency-workload-row {
   display: grid; width: 100%; text-align: left; align-items: center;
@@ -374,12 +364,30 @@ body {
 .agency-stage[data-stage="rework"] { background: var(--destructive-subtle); color: var(--destructive); }
 .agency-stage[data-stage="in_progress"] { background: #1e3354; color: #93c5fd; }
 @media (max-width: 767px) {
-  .agency-shell { flex-direction: column; }
-  .agency-nav { display: flex; flex-wrap: wrap; gap: 4px; flex: none; padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--border-subtle); }
+  .agency-shell { flex-direction: column; gap: 8px; padding: 8px; }
+  .agency-nav { display: flex; flex-wrap: wrap; gap: 4px; flex: none; padding: 8px; border: 1px solid var(--border-subtle); border-radius: 18px; background: var(--surface); }
   .agency-nav-label { display: none; }
-  .agency-nav button { width: auto; margin: 0; padding: 10px 12px; }
+  .agency-nav button { width: auto; margin: 0; gap: 7px; font-size: 13px; padding: 12px 8px; border-radius: 12px; }
   .agency-workload-row { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+
+.atrium-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--foreground); font-size: 18px; font-weight: 600; letter-spacing: -.03em; white-space: nowrap; }
+
+.atrium-brand img { width: 36px; height: 36px; object-fit: contain; }
+
+.agency-nav button[aria-pressed="true"]::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--accent); }
+
+.agency-main h1 { font-size: 28px; line-height: 1.2; }
+
+@media (max-width: 767px) {
+  .atrium-brand { font-size: 16px; gap: 8px; }
+  .atrium-brand img { width: 28px; height: 28px; }
+  .agency-main { border-radius: 18px; }
+  .agency-main h1 { font-size: 24px; }
+}
+
+[data-file-drop][data-dragging="true"] { outline: 2px dashed var(--accent); outline-offset: -3px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAction, useConvex, useMutation } from "convex/react";
-import { Download } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,11 +21,13 @@ export function AssetDetail({
   data,
   close,
   onChanged,
+  returnLabel,
 }: {
   assetId: Id<"rawAssets">;
   data: Data;
   close: () => void;
   onChanged: () => void;
+  returnLabel?: string;
 }) {
   const convex = useConvex(),
     readUrl = useAction(api.rawAssetActions.readUrl),
@@ -106,6 +108,12 @@ export function AssetDetail({
       }}
     >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        {returnLabel && (
+          <Button variant="ghost" className="w-fit -ml-2" onClick={close}>
+            <ArrowLeft />
+            {returnLabel}
+          </Button>
+        )}
         <DialogHeader>
           <DialogTitle className="break-words pr-5">
             {asset?.filename ?? "Source asset"}

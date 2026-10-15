@@ -344,7 +344,7 @@ export default function TeamSettingsPage() {
               {internalDeployment ? (
                 <div className="border-2 border-[#1a1a1a] p-5">
                   <h2 className="font-bold">Agency workspace</h2>
-                  <p className="mt-3 text-sm text-[#888]">Your team can create projects and upload within its configured storage cap. Lawn subscription checkout is disabled on this installation. Hosting, storage and media processing costs are managed separately.</p>
+                  <p className="mt-3 text-sm text-[#888]">Your team can create projects and upload within its configured storage cap. Subscription checkout is disabled on this installation. Hosting, storage and media processing costs are managed separately.</p>
                   <p className="mt-3 text-sm">Team roles and review permissions still apply. The administrator controls the storage cap.</p>
                 </div>
               ) : (<>

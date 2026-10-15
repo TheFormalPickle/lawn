@@ -3,6 +3,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { hasFileDrop } from "@/lib/useGlobalFileDrop";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ export function RawAssetLibrary({
   focusedId,
   onFocus,
   initialScope,
+  returnLabel,
 }: {
   teamId: Id<"teams">;
   data: Data;
@@ -25,6 +27,7 @@ export function RawAssetLibrary({
   focusedId: Id<"rawAssets"> | null;
   onFocus: (id: Id<"rawAssets"> | null) => void;
   initialScope: string;
+  returnLabel?: string;
 }) {
   const [scope, setScope] = useState(initialScope),
     [kind, setKind] = useState(""),
@@ -33,6 +36,7 @@ export function RawAssetLibrary({
     [refreshKey, setRefreshKey] = useState(0),
     [error, setError] = useState(""),
     [restoring, setRestoring] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const confirmed = useCallback(() => setRefreshKey((n) => n + 1), []);
   const uploads = useRawAssetUploads(teamId, data.subject, confirmed);
   const unfinished = useQuery(api.rawAssets.unfinished, { teamId }),
@@ -58,14 +62,58 @@ export function RawAssetLibrary({
       setRestoring(false);
     }
   };
+  const receiveFiles = (files: File[]) => {
+    setError("");
+    if (files.length > 100) {
+      setError("Upload up to 100 source files at a time.");
+      return;
+    }
+    const projectId =
+      scope && scope !== "shared" ? (scope as Id<"projects">) : undefined;
+    const fresh: File[] = [];
+    for (const file of files) {
+      const pending = unfinished?.items.find(
+        (row) =>
+          row.canConfirm &&
+          row.filename === file.name &&
+          row.fileSize === file.size &&
+          row.projectId === projectId,
+      );
+      if (pending)
+        uploads.add([file], projectId, {
+          assetId: pending._id,
+          requestKey: pending.requestKey,
+        });
+      else fresh.push(file);
+    }
+    uploads.add(fresh, projectId);
+  };
   return (
     <section
       hidden={!active}
+      data-file-drop="raw-library"
+      data-dragging={dragging}
+      onDragOver={(e) => {
+        if (!hasFileDrop(e.dataTransfer)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "copy";
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        if (!hasFileDrop(e.dataTransfer)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setDragging(false);
+        receiveFiles(Array.from(e.dataTransfer.files));
+      }}
       className="px-4 pb-6 sm:px-7"
       aria-label="Raw asset library"
     >
-      <div className="agency-panel mb-5 grid items-end gap-3 p-4 lg:grid-cols-[minmax(180px,1fr)_minmax(160px,220px)_140px_auto]">
+      <div className="agency-panel mb-5 grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-[minmax(180px,1fr)_minmax(160px,220px)_140px_auto]">
         <Input
+          className="col-span-2 lg:col-span-1"
           aria-label="Search raw assets"
           placeholder="Search source filenames…"
           value={search}
@@ -100,7 +148,7 @@ export function RawAssetLibrary({
           <option value="photo">Photos</option>
           <option value="audio">Audio</option>
         </select>
-        <label className="focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring)] inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]">
+        <label className="col-span-2 lg:col-span-1 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring)] inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]">
           <Upload size={16} />
           Upload source files
           <input
@@ -110,41 +158,16 @@ export function RawAssetLibrary({
             accept={RAW_ASSET_ACCEPT}
             className="sr-only"
             onChange={(e) => {
-              const files = Array.from(e.target.files ?? []);
-              if (files.length > 100) {
-                setError("Upload up to 100 source files at a time.");
-                e.target.value = "";
-                return;
-              }
-              const projectId =
-                scope && scope !== "shared"
-                  ? (scope as Id<"projects">)
-                  : undefined;
-              const fresh: File[] = [];
-              for (const file of files) {
-                const pending = unfinished?.items.find(
-                  (row) =>
-                    row.canConfirm &&
-                    row.filename === file.name &&
-                    row.fileSize === file.size &&
-                    row.projectId === projectId,
-                );
-                if (pending)
-                  uploads.add([file], projectId, {
-                    assetId: pending._id,
-                    requestKey: pending.requestKey,
-                  });
-                else fresh.push(file);
-              }
-              uploads.add(fresh, projectId);
+              receiveFiles(Array.from(e.target.files ?? []));
               e.target.value = "";
             }}
           />
         </label>
       </div>
       <p className="mb-5 text-sm text-muted">
-        Raw footage, photos and audio for the content team. Uploads in All
-        clients go to Shared across clients. Approved ads stay in Ready to use.
+        Drop raw video, photos or audio here, or choose Upload source files.
+        Uploads in All clients go to Shared across clients. Approved ads stay in
+        Ready to use.
       </p>
       {error && (
         <p role="alert" className="mb-4 text-sm text-[var(--destructive)]">
@@ -343,6 +366,7 @@ export function RawAssetLibrary({
       {focusedId && (
         <AssetDetail
           key={focusedId}
+          returnLabel={returnLabel}
           assetId={focusedId}
           data={data}
           close={() => onFocus(null)}

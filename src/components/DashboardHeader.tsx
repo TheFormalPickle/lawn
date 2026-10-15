@@ -1,32 +1,11 @@
+import { Brand } from "@/components/Brand";
 import { Link } from "@tanstack/react-router";
 import { UserButton } from "@clerk/tanstack-react-start";
-import { Moon, Sun } from "lucide-react";
-import { useTheme } from "@/components/theme/ThemeToggle";
+import { ThemeToggleButton } from "@/components/theme/ThemeToggle";
 import React from "react";
 import { useConvex } from "convex/react";
 import { useRoutePrewarmIntent } from "@/lib/useRoutePrewarmIntent";
 import { prewarmDashboardIndex } from "../../app/routes/dashboard/-index.data";
-
-function ThemeToggleButton() {
-  const { theme, toggleTheme, mounted } = useTheme();
-
-  if (!mounted) return <div className="w-8 h-8" />;
-
-  return (
-    <button
-      onClick={toggleTheme}
-      className="w-8 h-8 flex items-center justify-center text-[#888] hover:text-[#1a1a1a] hover:bg-[#e8e8e0] transition-colors"
-      title={`Switch to ${theme === "dark" ? "light" : "dark"} mode (⌘⇧L)`}
-      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-    >
-      {theme === "dark" ? (
-        <Sun className="h-4 w-4" />
-      ) : (
-        <Moon className="h-4 w-4" />
-      )}
-    </button>
-  );
-}
 
 export type PathSegment = {
   label: React.ReactNode;
@@ -56,29 +35,32 @@ export function DashboardHeader({
           className="hover:text-[#2d5a2d] transition-colors mr-2 flex-shrink-0"
           {...prewarmHomeIntentHandlers}
         >
-          lawn.
+          <Brand />
         </Link>
         {paths.map((path, index) => {
           const isIntermediate = paths.length >= 2 && index < paths.length - 1;
           return (
-          <div key={index} className={`${isIntermediate ? 'hidden sm:flex' : 'flex'} items-center min-w-0 flex-shrink`}>
-            <span className="text-[#888] mr-2 flex-shrink-0">/</span>
-            {path.href ? (
-              <Link
-                to={path.href}
-                preload="intent"
-                className="hover:text-[#2d5a2d] transition-colors truncate mr-2"
-                {...path.prewarmIntentHandlers}
-              >
-                {path.label}
-              </Link>
-            ) : (
-              <div className="truncate flex items-center gap-3">
-                {path.label}
-              </div>
-            )}
-          </div>
-        );
+            <div
+              key={index}
+              className={`${isIntermediate ? "hidden sm:flex" : "flex"} items-center min-w-0 flex-shrink`}
+            >
+              <span className="text-[#888] mr-2 flex-shrink-0">/</span>
+              {path.href ? (
+                <Link
+                  to={path.href}
+                  preload="intent"
+                  className="hover:text-[#2d5a2d] transition-colors truncate mr-2"
+                  {...path.prewarmIntentHandlers}
+                >
+                  {path.label}
+                </Link>
+              ) : (
+                <div className="truncate flex items-center gap-3">
+                  {path.label}
+                </div>
+              )}
+            </div>
+          );
         })}
       </div>
 
@@ -94,10 +76,14 @@ export function DashboardHeader({
             },
             elements: {
               avatarBox: "w-8 h-8 rounded-full border border-line",
-              userButtonPopoverCard: "bg-[var(--surface)] border border-line rounded-xl shadow-xl",
-              userButtonPopoverActionButton: "!text-[#1a1a1a] hover:!bg-[#e8e8e0] rounded-lg",
-              userButtonPopoverActionButtonText: "!text-[#1a1a1a] hover:!text-[#1a1a1a] font-sans font-medium",
-              userButtonPopoverActionButtonIcon: "!text-[#1a1a1a] hover:!text-[#1a1a1a]",
+              userButtonPopoverCard:
+                "bg-[var(--surface)] border border-line rounded-xl shadow-xl",
+              userButtonPopoverActionButton:
+                "!text-[#1a1a1a] hover:!bg-[#e8e8e0] rounded-lg",
+              userButtonPopoverActionButtonText:
+                "!text-[#1a1a1a] hover:!text-[#1a1a1a] font-sans font-medium",
+              userButtonPopoverActionButtonIcon:
+                "!text-[#1a1a1a] hover:!text-[#1a1a1a]",
               userButtonPopoverFooter: "hidden",
             },
           }}
