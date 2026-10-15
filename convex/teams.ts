@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { getUser, identityAvatarUrl, identityEmail, identityName, requireUser, requireTeamAccess } from "./auth";
 import { deploymentBillingPolicy } from "./deploymentBilling";
 import { getTeamSubscriptionState } from "./billingHelpers";
+import { preserveOriginalRemoval } from "./mediaDeletionReceipts";
 
 function normalizedEmail(value: string) {
   return value.trim().toLowerCase();
@@ -408,7 +409,7 @@ export const leave = mutation({
 export const deleteTeam = mutation({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
-    await requireTeamAccess(ctx, args.teamId, "owner");
+    const { user } = await requireTeamAccess(ctx, args.teamId, "owner");
     const subscriptionState = await getTeamSubscriptionState(ctx, args.teamId);
     if (subscriptionState.hasActiveSubscription) {
       throw new Error(
@@ -456,6 +457,7 @@ export const deleteTeam = mutation({
         .collect();
 
       for (const video of videos) {
+        await preserveOriginalRemoval(ctx, video, "workspace_deleted", user.subject);
         // Delete comments
         const comments = await ctx.db
           .query("comments")

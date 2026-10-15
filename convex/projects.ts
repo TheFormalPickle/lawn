@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { getUser, requireTeamAccess, requireProjectAccess } from "./auth";
 import { assertTeamCanUseWorkspace } from "./billingHelpers";
 import { removeProjectAssets } from "./rawAssets";
+import { preserveOriginalRemoval } from "./mediaDeletionReceipts";
 
 export const create = mutation({
   args: {
@@ -126,7 +127,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    await requireProjectAccess(ctx, args.projectId, "admin");
+    const { user } = await requireProjectAccess(ctx, args.projectId, "admin");
 
     await removeProjectAssets(ctx, args.projectId);
 
@@ -138,6 +139,7 @@ export const remove = mutation({
       .collect();
 
     for (const video of videos) {
+      await preserveOriginalRemoval(ctx, video, "project_deleted", user.subject);
       // Delete comments
       const comments = await ctx.db
         .query("comments")

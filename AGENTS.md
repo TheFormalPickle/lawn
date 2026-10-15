@@ -158,3 +158,11 @@ docs/account-onboarding.md. Preserve original private receipts, refuse ambiguous
 creation replay or deleted identity recreation, and never reset existing credentials
 to resend a workspace link. Explicit account switching must show sign-in again and
 retain the exact invitation; ordinary SSO login can reuse the wrong account.
+
+Edited-original removal tracking is provenance only: preserve exact pending-review
+receipts transactionally before losing metadata references. Never turn those
+receipts into automatic NAS/S3 deletion, normalize legacy paths, sweep unknown
+objects or report reclaimed bytes. Storage binding, outstanding PUTs, live/shared
+references and conditional-delete support need separate provider evidence. See
+docs/storage-lifecycle.md. Existing raw-asset deletion is a separate path; no
+claim that the journal repairs its retry or lease behavior.

@@ -2,6 +2,38 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  // Internal provenance only; no object-deletion executor. Receipts survive
+  // removal of their source workspace/project/video.
+  mediaDeletionReceipts: defineTable({
+    status: v.literal("pending_review"),
+    storageBinding: v.literal("unknown"),
+    uploadLease: v.literal("unknown"),
+    videoId: v.id("videos"),
+    projectId: v.id("projects"),
+    teamId: v.optional(v.id("teams")),
+    contentItemId: v.optional(v.id("contentItems")),
+    storageKey: v.string(),
+    storageETag: v.optional(v.string()),
+    fileSize: v.optional(v.number()),
+    contentType: v.optional(v.string()),
+    originalOnly: v.optional(v.boolean()),
+    videoStatus: v.union(
+      v.literal("uploading"),
+      v.literal("processing"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+    uploadedBySubject: v.string(),
+    requestedBySubject: v.optional(v.string()),
+    reason: v.union(
+      v.literal("video_deleted"),
+      v.literal("project_deleted"),
+      v.literal("workspace_deleted"),
+      v.literal("original_replaced"),
+    ),
+    recordedAt: v.number(),
+  }).index("by_original", ["videoId", "storageKey", "storageETag"]),
+
   teams: defineTable({
     rawAssetBytes: v.optional(v.number()),
     rawCatalogRevision: v.optional(v.number()),

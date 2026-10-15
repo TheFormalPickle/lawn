@@ -14,6 +14,7 @@ import { canProduceContent, canReviewContent } from "./contentWorkflow";
 import { mediaMode } from "./mediaPolicy";
 import { matchesMuxUpload } from "./uploadIdentity";
 import { assertTeamCanStoreBytes } from "./billingHelpers";
+import { preserveOriginalRemoval } from "./mediaDeletionReceipts";
 
 const workflowStatusValidator = v.union(
   v.literal("review"),
@@ -333,7 +334,8 @@ export const updateWorkflowStatus = mutation({
 export const remove = mutation({
   args: { videoId: v.id("videos") },
   handler: async (ctx, args) => {
-    await requireVideoAccess(ctx, args.videoId, "admin");
+    const { video, user } = await requireVideoAccess(ctx, args.videoId, "admin");
+    await preserveOriginalRemoval(ctx, video, "video_deleted", user.subject);
 
     const comments = await ctx.db
       .query("comments")
@@ -352,7 +354,6 @@ export const remove = mutation({
       await ctx.db.delete(link._id);
     }
 
-    const video = await ctx.db.get(args.videoId);
     if (video?.contentItemId) {
       const item = await ctx.db.get(video.contentItemId);
       if (item?.currentVideoId === args.videoId)
@@ -374,6 +375,11 @@ export const setUploadInfo = internalMutation({
     contentType: v.string(),
   },
   handler: async (ctx, args) => {
+    const previous = await ctx.db.get(args.videoId);
+    if (previous?.s3Key && previous.s3Key !== args.s3Key) {
+      const actor = await ctx.auth.getUserIdentity();
+      await preserveOriginalRemoval(ctx, previous, "original_replaced", actor?.subject);
+    }
     await ctx.db.patch(args.videoId, {
       s3Key: args.s3Key,
       s3ETag: undefined,

@@ -17,6 +17,7 @@ import type * as contentItems from "../contentItems.js";
 import type * as contentWorkflow from "../contentWorkflow.js";
 import type * as deploymentBilling from "../deploymentBilling.js";
 import type * as http from "../http.js";
+import type * as mediaDeletionReceipts from "../mediaDeletionReceipts.js";
 import type * as mediaPolicy from "../mediaPolicy.js";
 import type * as mux from "../mux.js";
 import type * as muxActions from "../muxActions.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   contentWorkflow: typeof contentWorkflow;
   deploymentBilling: typeof deploymentBilling;
   http: typeof http;
+  mediaDeletionReceipts: typeof mediaDeletionReceipts;
   mediaPolicy: typeof mediaPolicy;
   mux: typeof mux;
   muxActions: typeof muxActions;
