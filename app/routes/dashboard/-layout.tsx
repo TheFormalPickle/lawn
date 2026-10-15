@@ -1,5 +1,6 @@
 import { useAuth } from "@/lib/auth";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
+import { Button } from "@/components/ui/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -20,6 +21,10 @@ import { DashboardUploadProvider } from "@/lib/dashboardUploadContext";
 
 export default function DashboardLayout() {
   const { isLoaded, userId } = useAuth();
+  const {
+    isLoading: isBackendAuthLoading,
+    isAuthenticated: isBackendAuthenticated,
+  } = useConvexAuth();
   const location = useLocation();
   const { pathname, searchStr } = location;
   const params = useParams({ strict: false });
@@ -37,7 +42,7 @@ export default function DashboardLayout() {
   );
   const uploadTargets = useQuery(
     api.projects.listUploadTargets,
-    teamSlug ? { teamSlug } : {},
+    isBackendAuthenticated ? (teamSlug ? { teamSlug } : {}) : "skip",
   );
   const {
     uploads,
@@ -160,6 +165,23 @@ export default function DashboardLayout() {
             ? "Checking public playback access..."
             : "Redirecting to sign in..."}
         </div>
+      </div>
+    );
+  }
+
+  // Provider sign-in is not proof that the workspace accepted its token.
+  // Keep failed authentication out of empty onboarding and workspace creation.
+  if (!isBackendAuthenticated) {
+    return (
+      <div className="h-full min-h-screen flex flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+        <p role="status">
+          {isBackendAuthLoading
+            ? "Connecting to your workspace…"
+            : "Your account could not connect to the workspace. Reconnect to try again."}
+        </p>
+        {!isBackendAuthLoading && (
+          <Button onClick={() => window.location.reload()}>Reconnect</Button>
+        )}
       </div>
     );
   }

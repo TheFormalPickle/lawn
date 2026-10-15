@@ -64,7 +64,15 @@ rechecked before playback and approved download; this is an issuance-time identi
 check, not a full-file checksum or revocation of an already issued short lease.
 
 The API origin has no `/api` suffix: the Convex client adds its own API paths.
-The issuer and audience must match the actual signed access token. Never omit the
+The issuer and audience must match the actual signed access token. The selected
+Keycloak access-token provider uses Convex customJwt with the exact realm issuer,
+its HTTPS `/protocol/openid-connect/certs` JWKS, RS256 and required API audience.
+The standard OIDC ID-token parser is not the access-token contract: a multi-audience
+resource token can have a different authorized SPA client. Signature, expiry,
+issuer and audience checks remain required. Keycloak must retain its official
+`basic` default client scope so tokens contain the actual immutable `sub`; the
+backend and frontend never substitute an email or session ID for a missing subject.
+Never omit the
 audience check or put an OIDC client secret/admin key in frontend variables.
 Unknown provider modes fail closed. Existing installations retain Clerk behavior,
 but must explicitly set backend `AUTH_PROVIDER=clerk` before publishing this
@@ -75,6 +83,13 @@ a successful upgrade or permission to bypass authentication.
 Use an isolated Keycloak realm with public registration disabled, public SPA
 client `atrium-web`, standard code flow and enforced S256 PKCE, explicit access-token
 audience `atrium-api`, exact redirect origins and profile/email claims.
+Keep Keycloak's official `basic` client scope in the client's default scopes: its
+subject mapper supplies the stable `sub` required by the app and backend. Verify
+actual issued access tokens contain that UUID; an issuer/audience alone is not a
+valid identity. The backend uses Convex's `customJwt` verifier for these access
+tokens, with the exact issuer, realm certs JWKS, RS256 and required API audience.
+It does not treat the browser's access token as an OIDC ID token or waive
+signature/issuer/audience/expiration validation.
 Disable implicit/password grants and duplicate emails. Administrators provision
 only authorized identities; email editing stays admin-only until verified email
 change/recovery is configured. Tokens remain in memory and are refreshed through
