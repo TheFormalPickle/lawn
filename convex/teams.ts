@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { getUser, identityAvatarUrl, identityEmail, identityName, requireUser, requireTeamAccess } from "./auth";
 import { deploymentBillingPolicy } from "./deploymentBilling";
 import { getTeamSubscriptionState } from "./billingHelpers";
@@ -397,6 +398,10 @@ export const deleteTeam = mutation({
       );
     }
 
+    for (const asset of await ctx.db.query("rawAssets").withIndex("by_team", q => q.eq("teamId", args.teamId)).collect()) {
+      if (asset.storageKey) await ctx.scheduler.runAfter(0, internal.rawAssetActions.deleteBytes, { key: asset.storageKey });
+      await ctx.db.delete(asset._id);
+    }
     for (const table of ["contentBatches", "productionTeams"] as const)
       for (const row of await ctx.db.query(table).withIndex("by_team", q => q.eq("teamId", args.teamId)).collect()) await ctx.db.delete(row._id);
 

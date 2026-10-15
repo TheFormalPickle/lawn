@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getUser, requireTeamAccess, requireProjectAccess } from "./auth";
 import { assertTeamCanUseWorkspace } from "./billingHelpers";
+import { removeProjectAssets } from "./rawAssets";
 
 export const create = mutation({
   args: {
@@ -126,6 +127,8 @@ export const remove = mutation({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     await requireProjectAccess(ctx, args.projectId, "admin");
+
+    await removeProjectAssets(ctx, args.projectId);
 
     for (const batch of await ctx.db.query("contentBatches").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect()) await ctx.db.delete(batch._id);
     // Delete all videos in the project

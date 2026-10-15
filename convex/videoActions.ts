@@ -95,7 +95,9 @@ async function buildSignedBucketObjectUrl(
       : undefined,
     ResponseContentType: options?.contentType,
   });
-  return await getSignedUrl(s3, command, { expiresIn: options?.expiresIn ?? 600 });
+  return await getSignedUrl(s3, command, {
+    expiresIn: options?.expiresIn ?? 600,
+  });
 }
 
 function getValueString(value: unknown, field: string): string | null {
@@ -105,17 +107,17 @@ function getValueString(value: unknown, field: string): string | null {
 
 function normalizeContentType(contentType: string | null | undefined): string {
   if (!contentType) return "";
-  return contentType
-    .split(";")[0]
-    .trim()
-    .toLowerCase();
+  return contentType.split(";")[0].trim().toLowerCase();
 }
 
 function isAllowedUploadContentType(contentType: string): boolean {
   return ALLOWED_UPLOAD_CONTENT_TYPES.has(contentType);
 }
 
-function validateUploadRequestOrThrow(args: { fileSize: number; contentType: string }) {
+function validateUploadRequestOrThrow(args: {
+  fileSize: number;
+  contentType: string;
+}) {
   if (!Number.isFinite(args.fileSize) || args.fileSize <= 0) {
     throw new Error("Video file size must be greater than zero.");
   }
@@ -145,21 +147,20 @@ function shouldDeleteUploadedObjectOnFailure(error: unknown): boolean {
   );
 }
 
-async function requireVideoMemberAccess(
-  ctx: ActionCtx,
-  videoId: Id<"videos">
-) {
-  const video = (await ctx.runQuery(api.videos.get, { videoId })) as
-    | { role?: string; canUpload?: boolean }
-    | null;
+async function requireVideoMemberAccess(ctx: ActionCtx, videoId: Id<"videos">) {
+  const video = (await ctx.runQuery(api.videos.get, { videoId })) as {
+    role?: string;
+    canUpload?: boolean;
+  } | null;
   if (!video || video.role === "viewer" || video.canUpload === false) {
     throw new Error("Requires member role or higher");
   }
 }
 
-function buildPublicPlaybackSession(
-  playbackId: string,
-): { url: string; posterUrl: string } {
+function buildPublicPlaybackSession(playbackId: string): {
+  url: string;
+  posterUrl: string;
+} {
   return {
     url: buildMuxPlaybackUrl(playbackId),
     posterUrl: buildMuxThumbnailUrl(playbackId),
@@ -183,7 +184,9 @@ async function ensurePublicPlaybackId(
     policy?: string;
   }>;
 
-  let publicPlaybackId = playbackIds.find((entry) => entry.policy === "public" && entry.id)?.id;
+  let publicPlaybackId = playbackIds.find(
+    (entry) => entry.policy === "public" && entry.id,
+  )?.id;
   if (!publicPlaybackId) {
     const created = await createPublicPlaybackId(muxAssetId);
     publicPlaybackId = created.id;
@@ -261,8 +264,10 @@ export const markUploadComplete = action({
     }
     if (args.uploadId && video.s3Key !== args.uploadId)
       throw new Error("This upload was replaced. Use the current edit.");
-    if (video.status === "ready" || video.status === "processing") return { success: true };
-    if (video.status === "failed") throw new Error("This upload failed. Upload a new edit to retry.");
+    if (video.status === "ready" || video.status === "processing")
+      return { success: true };
+    if (video.status === "failed")
+      throw new Error("This upload failed. Upload a new edit to retry.");
 
     try {
       const s3 = getS3Client();
@@ -289,27 +294,39 @@ export const markUploadComplete = action({
         head.ContentType ?? video.contentType,
       );
       if (!isAllowedUploadContentType(normalizedContentType)) {
-        throw new Error("Unsupported video format. Allowed: mp4, mov, webm, mkv.");
+        throw new Error(
+          "Unsupported video format. Allowed: mp4, mov, webm, mkv.",
+        );
       }
 
-      const metadataApplied = await ctx.runMutation(internal.videos.reconcileUploadedObjectMetadata, {
-        videoId: args.videoId,
-        uploadId: video.s3Key,
-        fileSize: contentLength,
-        contentType: normalizedContentType,
-      });
+      const metadataApplied = await ctx.runMutation(
+        internal.videos.reconcileUploadedObjectMetadata,
+        {
+          videoId: args.videoId,
+          uploadId: video.s3Key,
+          fileSize: contentLength,
+          contentType: normalizedContentType,
+        },
+      );
 
       if (!metadataApplied) throw new Error("This upload was replaced.");
-      const shouldIngest = await ctx.runMutation(internal.videos.markAsProcessing, {
-        videoId: args.videoId,
-        uploadId: video.s3Key,
-      });
+      const shouldIngest = await ctx.runMutation(
+        internal.videos.markAsProcessing,
+        {
+          videoId: args.videoId,
+          uploadId: video.s3Key,
+        },
+      );
       if (!shouldIngest) return { success: true };
 
       const ingestUrl = await buildSignedBucketObjectUrl(video.s3Key, {
         expiresIn: 60 * 60 * 24,
       });
-      const asset = await createMuxAssetFromInputUrl(args.videoId, ingestUrl, video.s3Key);
+      const asset = await createMuxAssetFromInputUrl(
+        args.videoId,
+        ingestUrl,
+        video.s3Key,
+      );
       if (asset.id) {
         await ctx.runMutation(internal.videos.setMuxAssetReference, {
           videoId: args.videoId,
@@ -360,7 +377,9 @@ export const markUploadFailed = action({
   handler: async (ctx, args) => {
     await requireVideoMemberAccess(ctx, args.videoId);
 
-    const video = await ctx.runQuery(api.videos.getVideoForPlayback, { videoId: args.videoId });
+    const video = await ctx.runQuery(api.videos.getVideoForPlayback, {
+      videoId: args.videoId,
+    });
     if (!video?.s3Key) return { success: true };
     await ctx.runMutation(internal.videos.markAsFailed, {
       videoId: args.videoId,
@@ -378,10 +397,7 @@ export const getPlaybackSession = action({
     url: v.string(),
     posterUrl: v.string(),
   }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ url: string; posterUrl: string }> => {
+  handler: async (ctx, args): Promise<{ url: string; posterUrl: string }> => {
     const video = await ctx.runQuery(api.videos.getVideoForPlayback, {
       videoId: args.videoId,
     });
@@ -455,10 +471,7 @@ export const getPublicPlaybackSession = action({
     url: v.string(),
     posterUrl: v.string(),
   }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ url: string; posterUrl: string }> => {
+  handler: async (ctx, args): Promise<{ url: string; posterUrl: string }> => {
     const result = await ctx.runQuery(api.videos.getByPublicId, {
       publicId: args.publicId,
     });
@@ -482,10 +495,7 @@ export const getSharedPlaybackSession = action({
     url: v.string(),
     posterUrl: v.string(),
   }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ url: string; posterUrl: string }> => {
+  handler: async (ctx, args): Promise<{ url: string; posterUrl: string }> => {
     const result = await ctx.runQuery(api.videos.getByShareGrant, {
       grantToken: args.grantToken,
     });
@@ -510,9 +520,14 @@ export const getDownloadUrl = action({
     filename: v.string(),
   }),
   handler: async (ctx, args): Promise<{ url: string; filename: string }> => {
-    const video = await ctx.runQuery(args.approvedOnly ? api.contentItems.getReadyVideo : api.videos.getVideoForPlayback, {
-      videoId: args.videoId,
-    });
+    const video = await ctx.runQuery(
+      args.approvedOnly
+        ? api.contentItems.getReadyVideo
+        : api.videos.getVideoForPlayback,
+      {
+        videoId: args.videoId,
+      },
+    );
 
     if (!video) {
       throw new Error("Video not found");
@@ -528,6 +543,45 @@ export const getDownloadUrl = action({
     }
 
     const filename = buildDownloadFilename(video.title, key);
+
+    if (args.approvedOnly) {
+      // Review approval is recorded evidence, not proof that the original is
+      // currently reachable. Check on demand rather than polling every card.
+      const head = await getS3Client()
+        .send(
+          new HeadObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: normalizeBucketKey(key),
+          }),
+        )
+        .catch(() => {
+          throw new Error(
+            "The approved original is unavailable. Retry after storage access is restored.",
+          );
+        });
+      if (
+        typeof head.ContentLength !== "number" ||
+        !Number.isFinite(head.ContentLength) ||
+        head.ContentLength <= 0 ||
+        (typeof video.fileSize === "number" &&
+          video.fileSize > 0 &&
+          head.ContentLength !== video.fileSize) ||
+        (video.contentType &&
+          normalizeContentType(head.ContentType) !==
+            normalizeContentType(video.contentType))
+      )
+        throw new Error(
+          "The approved original is unavailable or has changed. Retry after storage is restored.",
+        );
+      // Access/current-version approval may change during the storage read.
+      const current = await ctx.runQuery(api.contentItems.getReadyVideo, {
+        videoId: args.videoId,
+      });
+      if (current.s3Key !== video.s3Key)
+        throw new Error(
+          "This approved edit was replaced. Open the current deliverable.",
+        );
+    }
 
     return {
       url: await buildSignedBucketObjectUrl(key, {

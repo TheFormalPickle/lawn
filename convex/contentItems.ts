@@ -94,8 +94,11 @@ export const list = query({
     ).flat();
     const byId = new Map(videos.map((video) => [video._id, video]));
     const itemsById = new Map(items.map((item) => [item._id, item]));
+    const sourceIds = membership.role === "viewer" ? [] : [...new Set(items.flatMap(item => item.sourceAssetIds ?? []))];
+    const sources = new Map((await Promise.all(sourceIds.map(id => ctx.db.get(id)))).filter(source => source !== null).map(source => [source._id, source]));
     return {
       canManage: canManageContent(membership.role),
+      canBrowseRaw: membership.role !== "viewer",
       subject: user.subject,
       productionTeams, batches: batches.sort((a,b) => b._creationTime-a._creationTime),
       projects,
@@ -116,6 +119,11 @@ export const list = query({
               : null;
           return {
             ...item,
+            sourceAssets: membership.role === "viewer" ? [] : (item.sourceAssetIds ?? []).map(id => {
+              const source = sources.get(id);
+              const exact = source?.teamId === teamId && (!source.projectId || source.projectId === item.projectId) && source.status === "ready";
+              return { _id: id, filename: exact ? source.filename : "Unavailable source", available: exact };
+            }),
             stage: contentStage(item, exact),
             video: exact,
             canProduce: canProduceContent(item, user.subject, membership.role),

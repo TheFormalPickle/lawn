@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 export default defineSchema({
   teams: defineTable({
+    rawAssetBytes: v.optional(v.number()),
     name: v.string(),
     slug: v.string(),
     ownerClerkId: v.string(),
@@ -73,6 +74,7 @@ export default defineSchema({
     .index("by_creator_request", ["teamId", "createdByClerkId", "requestKey"]),
 
   contentItems: defineTable({
+    sourceAssetIds: v.optional(v.array(v.id("rawAssets"))),
     batchId: v.optional(v.id("contentBatches")),
     plannedAt: v.optional(v.number()),
     sequence: v.optional(v.number()),
@@ -94,6 +96,30 @@ export default defineSchema({
     .index("by_team", ["teamId"])
     .index("by_project", ["projectId"])
     .index("by_creator_request", ["teamId", "createdByClerkId", "requestKey"]),
+
+  rawAssets: defineTable({
+    teamId: v.id("teams"),
+    projectId: v.optional(v.id("projects")),
+    filename: v.string(),
+    fileSize: v.number(),
+    contentType: v.string(),
+    kind: v.union(v.literal("video"), v.literal("photo"), v.literal("audio")),
+    searchText: v.string(),
+    uploadedByClerkId: v.string(),
+    uploadedByName: v.string(),
+    requestKey: v.string(),
+    requestSignature: v.string(),
+    storageKey: v.optional(v.string()),
+    storageETag: v.optional(v.string()),
+    status: v.union(v.literal("uploading"), v.literal("ready"), v.literal("removed")),
+  }).index("by_team", ["teamId"])
+    .index("by_project", ["projectId"])
+    .index("by_team_status", ["teamId", "status"])
+    .index("by_team_status_scope_kind", ["teamId", "status", "projectId", "kind"])
+    .index("by_team_status_kind", ["teamId", "status", "kind"])
+    .index("by_team_status_uploader", ["teamId", "status", "uploadedByClerkId"])
+    .index("by_creator_request", ["teamId", "uploadedByClerkId", "requestKey"])
+    .searchIndex("search_files", { searchField: "searchText", filterFields: ["teamId", "projectId", "kind", "status"] }),
 
   videos: defineTable({
     projectId: v.id("projects"),

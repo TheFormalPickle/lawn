@@ -69,3 +69,15 @@ verifies filters, genuine scoped empty, local font loading, dialogs, light mode 
 zero page errors. Early private alternate-origin test adapters failed local CORS
 or Chromium local-network checks; final acceptance serves compiled files from the
 existing allowed local origin without changing product gates or provider policy.
+
+## Raw-library extension
+
+The new member-only Raw assets destination uses the same navy/amber controls and
+compact source rows. Mobile navigation wraps instead of clipping the third tab.
+Filename/client/type filters lead directly to original preview/download and
+optional source attachment; no nested management dashboard, decorative counts or
+second approval state. Photo/video/audio previews use real originals in one dialog.
+CMOs start in Ready to use. Raw list, decoded photo, missing-source recovery and
+approved-download recovery were inspected at1440/390 alongside the existing style.
+The original two-destination concept predates the user’s explicit raw-library scope;
+this third live destination is an intentional functional extension.

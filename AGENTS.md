@@ -78,4 +78,24 @@ each ad. Directors plan the slots, producers mostly edit, and both film. Content
 teams are pairs within the agency workspace, not separate isolated Lawn teams.
 Keep roster setup separate from daily workload entry. Existing assignments retain
 copied owners when a pair roster changes; do not silently rewrite work. CMOs browse
-approved deliverables; the content team also needs a distinct raw-asset library.
+approved deliverables; the content team uses the distinct member-only raw-asset library.
+Raw source references never confer approval. Use existing S3 signing and shared
+recorded-file quota; preserve actor-bound upload receipts and removed tombstones.
+Validate provider ETag/size/type at preview/download without treating metadata
+as proof of current byte availability. Run typecheck:convex for backend changes.
+
+## Clean foundation and intended hosting
+
+Jacob’s October15 direction: Lawn is the base for a clean future Atrium rebuild,
+not a recipient for the old Atrium tree. Current scope stays content assignments,
+review, raw sources and approved deliverables. Reuse visual style, not old agents,
+analytics, background services or customer data. Add future capabilities only when
+separately requested and justified. Intended hosting is an office mini PC on the
+NAS switch, using atriumsuite.com. This is direction, not deployment authority.
+Do not change that domain, office network, NAS mounts or current Atrium services.
+The ignored synthetic preview is never a production/shared-team deployment.
+
+V1 production target is Friday, October 23, 2026. Prioritize the content workflow,
+real deployment rehearsal and recovery over new subsystems. Scope, dated preparation
+targets and launch evidence gates are in docs/v1-launch.md. Preserve the current
+Atrium and NAS while preparing the new installation.

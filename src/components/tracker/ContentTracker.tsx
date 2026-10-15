@@ -26,8 +26,9 @@ import {
 import { useDashboardUploadContext } from "@/lib/dashboardUploadContext";
 import { triggerDownload } from "@/lib/download";
 import { videoPath } from "@/lib/routes";
-import { ListTodo, FolderCheck, ChevronRight } from "lucide-react";
+import { ListTodo, FolderCheck, ChevronRight, Library } from "lucide-react";
 import { WorkloadIntake } from "./WorkloadIntake";
+import { RawAssetLibrary } from "@/components/assets/RawAssetLibrary";
 
 type Data = FunctionReturnType<typeof api.contentItems.list>;
 type Item = Data["items"][number];
@@ -69,11 +70,20 @@ export function ContentTracker({
   const create = useMutation(api.contentItems.create);
   const update = useMutation(api.contentItems.update);
   const plan = useMutation(api.contentItems.plan);
+  const detachSource = useMutation(api.rawAssets.detachFromAssignment);
   const start = useMutation(api.contentItems.start);
   const link = useMutation(api.contentItems.linkVideo);
   const download = useAction(api.videoActions.getDownloadUrl);
   const { requestUpload } = useDashboardUploadContext();
-  const [tab, setTab] = useState<"work" | "library">("work");
+  const [tab, setTab] = useState<"work" | "library" | "raw" | null>(null);
+  const [rawOpened, setRawOpened] = useState(false);
+  const [rawFocus, setRawFocus] = useState<Id<"rawAssets"> | null>(null);
+  const openRaw = (id: Id<"rawAssets"> | null = null) => {
+    setRawOpened(true);
+    setRawFocus(id);
+    setSelectedId(null);
+    setTab("raw");
+  };
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
   const [stageFilter, setStageFilter] = useState("");
@@ -199,6 +209,10 @@ export function ContentTracker({
         Loading assignments and approved content…
       </p>
     );
+  const activeTab =
+    !data.canBrowseRaw && (tab === null || tab === "raw")
+      ? "library"
+      : (tab ?? "work");
   const name = (subject?: string) =>
     data.members.find((member) => member.userClerkId === subject)?.userName ??
     (subject ? "Former team member" : "Unassigned");
@@ -243,7 +257,7 @@ export function ContentTracker({
         <p className="agency-nav-label">Lawn</p>
         <button
           type="button"
-          aria-pressed={tab === "work"}
+          aria-pressed={activeTab === "work"}
           onClick={() => setTab("work")}
         >
           <ListTodo size={18} />
@@ -251,25 +265,43 @@ export function ContentTracker({
         </button>
         <button
           type="button"
-          aria-pressed={tab === "library"}
+          aria-pressed={activeTab === "library"}
           onClick={() => setTab("library")}
         >
           <FolderCheck size={18} />
           Ready to use
         </button>
+        {data.canBrowseRaw && (
+          <button
+            type="button"
+            aria-pressed={activeTab === "raw"}
+            onClick={() => openRaw()}
+          >
+            <Library size={18} />
+            Raw assets
+          </button>
+        )}
       </nav>
       <div className="agency-main">
         <div className="px-4 pt-7 pb-5 sm:px-7">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-3xl font-semibold tracking-tight">
-                Content tracker
+                {activeTab === "raw"
+                  ? "Raw assets"
+                  : activeTab === "library"
+                    ? "Ready to use"
+                    : "Content tracker"}
               </h1>
               <p className="mt-1 text-sm text-[#888]">
-                Assign client workloads. Directors plan the ads.
+                {activeTab === "raw"
+                  ? "Find source material. Preview it. Use it in the next edit."
+                  : activeTab === "library"
+                    ? "Approved originals, ready for your client accounts."
+                    : "Assign client workloads. Directors plan the ads."}
               </p>
             </div>
-            {data.canManage && (
+            {data.canManage && activeTab === "work" && (
               <WorkloadIntake
                 data={data}
                 teamId={teamId}
@@ -285,7 +317,7 @@ export function ContentTracker({
               />
             )}
           </div>
-          {tab === "work" && batchFilter && data.batches.length > 0 && (
+          {activeTab === "work" && batchFilter && data.batches.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">
               <select
                 aria-label="Client workload"
@@ -309,54 +341,56 @@ export function ContentTracker({
               )}
             </div>
           )}
-          <div className="agency-panel mt-5 grid items-center gap-3 p-4 lg:grid-cols-[minmax(140px,1fr)_minmax(140px,190px)_minmax(120px,160px)_auto]">
-            <Input
-              aria-label="Search content"
-              placeholder="Search content or clients…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <select
-              aria-label="Filter by project"
-              className={selectClass}
-              value={projectFilter}
-              onChange={(event) => setProjectFilter(event.target.value)}
-            >
-              <option value="">All clients</option>
-              {data.projects.map((project) => (
-                <option key={project._id} value={project._id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            {tab === "work" ? (
+          {activeTab !== "raw" && (
+            <div className="agency-panel mt-5 grid items-center gap-3 p-4 lg:grid-cols-[minmax(140px,1fr)_minmax(140px,190px)_minmax(120px,160px)_auto]">
+              <Input
+                aria-label="Search content"
+                placeholder="Search content or clients…"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
               <select
-                aria-label="Filter by status"
+                aria-label="Filter by project"
                 className={selectClass}
-                value={stageFilter}
-                onChange={(event) => setStageFilter(event.target.value)}
+                value={projectFilter}
+                onChange={(event) => setProjectFilter(event.target.value)}
               >
-                <option value="">All statuses</option>
-                {CONTENT_STAGES.map((stage) => (
-                  <option key={stage} value={stage}>
-                    {CONTENT_STAGE_LABELS[stage]}
+                <option value="">All clients</option>
+                {data.projects.map((project) => (
+                  <option key={project._id} value={project._id}>
+                    {project.name}
                   </option>
                 ))}
               </select>
-            ) : (
-              <p className="self-center text-xs text-[#888]">
-                Approved, current versions only
-              </p>
-            )}
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={mine}
-                onChange={(event) => setMine(event.target.checked)}
-              />
-              My work
-            </label>
-          </div>
+              {activeTab === "work" ? (
+                <select
+                  aria-label="Filter by status"
+                  className={selectClass}
+                  value={stageFilter}
+                  onChange={(event) => setStageFilter(event.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  {CONTENT_STAGES.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {CONTENT_STAGE_LABELS[stage]}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="self-center text-xs text-[#888]">
+                  Approved, current versions only
+                </p>
+              )}
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={mine}
+                  onChange={(event) => setMine(event.target.checked)}
+                />
+                My work
+              </label>
+            </div>
+          )}
         </div>
         {!connected && (
           <p
@@ -375,8 +409,11 @@ export function ContentTracker({
             {error}
           </p>
         )}
-        <div className="flex-1 overflow-auto px-4 pb-6 sm:px-7">
-          {tab === "work" ? (
+        <div
+          hidden={activeTab === "raw"}
+          className="flex-1 overflow-auto px-4 pb-6 sm:px-7"
+        >
+          {activeTab === "work" ? (
             <>
               {!batchFilter && data.batches.length > 0 && (
                 <div
@@ -556,6 +593,17 @@ export function ContentTracker({
             </div>
           )}
         </div>
+        {rawOpened && data.canBrowseRaw && (
+          <RawAssetLibrary
+            key={`${teamId}:${data.subject}`}
+            teamId={teamId}
+            data={data}
+            active={activeTab === "raw"}
+            focusedId={rawFocus}
+            onFocus={setRawFocus}
+            initialScope={projectFilter}
+          />
+        )}
       </div>
       <Dialog
         open={!!selected && !editing}
@@ -589,6 +637,44 @@ export function ContentTracker({
                   </div>
                 ))}
               </dl>
+              {data.canBrowseRaw && selected.sourceAssets.length > 0 && (
+                <div className="space-y-2 border-t border-line pt-3">
+                  <h3 className="text-sm font-medium">Source assets</h3>
+                  {selected.sourceAssets.map((source) => (
+                    <div
+                      key={source._id}
+                      className="flex flex-wrap items-center justify-between gap-2"
+                    >
+                      <button
+                        type="button"
+                        disabled={!source.available}
+                        className="min-w-0 break-words text-left text-sm text-[var(--accent)] underline-offset-4 hover:underline disabled:text-muted"
+                        onClick={() => openRaw(source._id)}
+                      >
+                        {source.filename}
+                      </button>
+                      {selected.canProduce && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy || !connected}
+                          aria-label={`Remove reference to ${source.filename}`}
+                          onClick={() =>
+                            void act(() =>
+                              detachSource({
+                                itemId: selected._id,
+                                assetId: source._id,
+                              }),
+                            )
+                          }
+                        >
+                          Remove reference
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               {error && (
                 <p role="alert" className="text-sm text-red-700">
                   {error}

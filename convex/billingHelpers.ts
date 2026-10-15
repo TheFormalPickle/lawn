@@ -108,6 +108,9 @@ export async function getTeamStorageUsedBytes(
   );
 
   let total = 0;
+  // Raw originals reserve quota before a signed transfer just like video uploads.
+  // This is recorded-file accounting, not a physical bucket/retention audit.
+  total += await getRawAssetStorageUsedBytes(ctx, teamId);
   for (const videos of videosByProject) {
     for (const video of videos) {
       if (video.status === "failed") continue;
@@ -118,6 +121,21 @@ export async function getTeamStorageUsedBytes(
   }
 
   return total;
+}
+
+export async function getRawAssetStorageUsedBytes(ctx: BillingCtx, teamId: Id<"teams">) {
+  const team = await ctx.db.get(teamId);
+  if (!team) throw new Error("Team not found");
+  if (team.rawAssetBytes !== undefined) return team.rawAssetBytes;
+  // Compatibility for records created before this optional counter existed.
+  const assets = await ctx.db.query("rawAssets").withIndex("by_team", q => q.eq("teamId", teamId)).collect();
+  return assets.reduce((sum, asset) => sum + (asset.status === "removed" ? 0 : asset.fileSize), 0);
+}
+export async function adjustRawAssetBytes(ctx: MutationCtx, teamId: Id<"teams">, delta: number) {
+  const bytes = await getRawAssetStorageUsedBytes(ctx, teamId);
+  const next = bytes + delta;
+  if (!Number.isSafeInteger(next) || next < 0) throw new Error("Raw asset storage accounting is unavailable.");
+  await ctx.db.patch(teamId, { rawAssetBytes: next });
 }
 
 export async function assertTeamCanUseWorkspace(

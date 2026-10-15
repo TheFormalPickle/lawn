@@ -1,5 +1,8 @@
 # First agency installation
 
+**V1 target: Friday, October 23, 2026.** See [v1-launch.md](v1-launch.md)
+for the bounded release scope, preparation sequence and remaining acceptance gates.
+
 This is a new standalone Lawn installation. Do not reuse Atrium's database, mounts,
 provider keys, processes or production configuration. The sample at localhost:5297
 is a local workflow preview, not a shared team environment or real sign-in.
@@ -17,7 +20,7 @@ LAWN_INTERNAL_STORAGE_GB=100
 This enables projects/uploads without Lawn subscription checkout and retains
 team authentication, roles, assignment/review gates and a per-team storage cap.
 Default mode remains `subscription`; an unknown mode or invalid cap fails closed.
-The cap counts recorded nonfailed video sizes, following the existing quota model.
+The cap counts recorded nonfailed video sizes plus pending/ready raw originals.
 It is not a physical bucket quota, archival/retention policy or full storage audit.
 Hosting, storage and Mux still incur their own infrastructure costs. Internal mode
 does not restrict signup, change public share defaults, cancel old subscriptions,
@@ -49,7 +52,11 @@ do not switch a live paid customer deployment without reconciling its billing.
 6. Set internal mode and its cap, then run `bun run dev`. Open the normal app at
    localhost:5296/dashboard and sign in with the actual Clerk test accounts. The
    synthetic identity chooser at port5297 is excluded from Git and deployment.
-7. Create test clients/projects, set up the two content-team pairs and assign a
+7. Rehearse source files too: upload generated video/photo/audio as a content member,
+   preview/download, attach/detach an assigned source, retry interrupted confirmation,
+   and verify a CMO cannot browse raw assets. Check S3 HEAD and ETag support, private
+   GET/signing, correct Content-Type and byte Range for original previews. No new
+   transcoder is used for raw sources. Then create test clients/projects, set up the two content-team pairs and assign a
    client/count/due-date workload. Let its director plan a slot; upload generated noncustomer
    footage, request a revision, upload the revised edit, approve as director and
    retrieve it as a CMO. Check actual playback and original-file byte equality;
@@ -62,7 +69,7 @@ do not switch a live paid customer deployment without reconciling its billing.
 
 ## Quality and promotion
 
-Run test, typecheck, lint and build. GitHub checks use frozen dependencies, Node22
+Run test, typecheck, typecheck:convex, lint and build. GitHub checks use frozen dependencies, Node22
 and Bun1.3.6 with inert build configuration, no deployment credentials. A green
 source build is not sign-in/media-provider acceptance. Local frozen install and all source checks also pass with the exact pinned Bun1.3.6
 on this Mac. Hosted Linux/Windows execution is reported separately when it runs.
@@ -77,3 +84,24 @@ created by this local pass.
 References: [Convex hosting](https://docs.convex.dev/production/hosting/vercel),
 [Clerk TanStack Start setup](https://clerk.com/docs/tanstack-react-start/getting-started/quickstart),
 [Bun CI setup](https://bun.sh/guides/runtime/cicd).
+
+## Office hosting direction — October15
+
+Jacob intends the new Lawn-based Atrium to run on an office mini PC connected to
+the same switch as the NAS, using atriumsuite.com. Its OS/capacity and intended
+storage/access arrangement have not been established here. This direction does
+not authorize deploying, changing DNS, moving the current Atrium, mounting the NAS
+or importing customer records. Preserve the original systems during evaluation.
+
+The current source uses Convex, Clerk, S3-compatible object storage and Mux. Hosting
+the web app on the mini PC alone does not replace those dependencies or make the
+system fully local/offline. A NAS share is not the S3 API the current code expects.
+Choose and rehearse the intended backend/auth/storage/media arrangement before
+preparing the office launch. Do not quietly bring over old Atrium infrastructure
+to fill these gaps. Keep new work limited to the content tracker/library/review hub.
+
+The local5297 sample uses synthetic admin identities and ignored fixture config;
+it must never be exposed at atriumsuite.com or promoted as real sign-in. Production
+needs the normal authenticated application, protected secrets/storage, TLS, tested
+backup/recovery and real role/media acceptance. Those are a separate reviewed
+launch step, not claims made by the local library tests.

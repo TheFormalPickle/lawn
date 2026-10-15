@@ -375,7 +375,7 @@ body {
 .agency-stage[data-stage="in_progress"] { background: #1e3354; color: #93c5fd; }
 @media (max-width: 767px) {
   .agency-shell { flex-direction: column; }
-  .agency-nav { display: flex; gap: 4px; flex: none; padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--border-subtle); }
+  .agency-nav { display: flex; flex-wrap: wrap; gap: 4px; flex: none; padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--border-subtle); }
   .agency-nav-label { display: none; }
   .agency-nav button { width: auto; margin: 0; padding: 10px 12px; }
   .agency-workload-row { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 16px; }

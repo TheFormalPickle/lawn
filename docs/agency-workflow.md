@@ -1,8 +1,9 @@
 # Agency content workflow
 
-Lawn remains a standalone application. The immediate goal is one route from a brief
-and assignment through production, review and CMO retrieval. Atrium integration is
-future work.
+Lawn is the clean foundation for a future Atrium rebuild. The immediate scope is
+one content workflow: client workloads, planning, production, review, raw sources
+and approved retrieval. Keep it standalone for now. Reuse Atrium’s visual language;
+do not port its old subsystems, agents, analytics or data wholesale.
 
 ## Working model
 
@@ -54,7 +55,7 @@ They must never be deployed or copied into production.
 
 ## Verification and remaining acceptance
 
-The regression suite passes 25 tests across five files. It exercises Convex
+The regression suite passes 34 tests across six files. It exercises Convex
 handlers against an in-memory test backend: roles, cross-team/project linking,
 create replay identity, current-version approval, stale edits, deletion cleanup,
 existing-video compatibility and same-ID original-file replacement.
@@ -134,7 +135,7 @@ name instead of an opaque export filename. Head/producer/director/CMO all use th
 same saved work. Filled brief fields have explicit accessible labels. Workload
 and deliverable views use the same My work filter scope.
 
-Raw video/photo/audio browsing remains a separate next milestone. The user’s
+Raw video/photo/audio browsing is implemented as a separate member-only library. The user’s
 workflow definition is authoritative; Monday’s unavailable board reader does not
 block this implementation or imply an import. No Atrium services/data are linked.
 Atrium's checked design-system source/screens are a read-only style reference.
@@ -151,7 +152,74 @@ verification](interface-direction.md) for the concept comparison and limits.
 
 The built local workflow passes the same five-slot/two-team journey, including
 refresh after a lost workload confirmation and actual review/download persistence.
-Source checks pass with pinned Bun 1.3.6 and Node 22. Hosted Linux and Windows
-install/test/types/lint/build passed workload commit183e690; subsequent interface
-commits require their own hosted results. Raw-asset browsing is still the next
-functional milestone, followed by intended sign-in/media-provider rehearsal.
+Source checks use pinned Bun 1.3.6 and Node 22. Hosted Linux and Windows
+install/test/types/lint/build passed interface commit d04dbf2; the shared-library
+candidate requires its own exact-head hosted result. The raw-asset library is now implemented; intended sign-in/media-provider rehearsal
+remains before shared team adoption.
+
+## Shared raw asset library
+
+Content members have **Raw assets** beside Assignments and Ready to use. Upload
+one or multiple files (up to100 per selection) without entering per-file records.
+The selected client is the upload destination; All clients/Shared across clients
+uploads become agency-shared sources. Search filenames and filter by client/media.
+Open a file once to preview/download it or attach it to assigned work. Assignment
+source links reopen that exact original; Remove reference detaches it without
+removing the library asset. References do not copy media or change review approval.
+Client sources cannot be attached to another client’s work; shared sources can.
+CMOs/viewers land directly in Ready to use and cannot call raw-library APIs.
+
+The existing S3-compatible bucket, credentials and signing authority are reused.
+Raw files are private signed originals, not public share links or Mux jobs. Common
+MP4/MOV/WebM, JPEG/PNG/WebP/AVIF/HEIC and supported audio files use original browser
+preview. Unsupported browser codecs retain download/retry guidance; this is not
+universal camera-RAW or transcoding support. Maximum original5GiB, nonempty only.
+Raw pending/ready reservations share the existing team storage cap with edits.
+Their byte counter updates in the same database transaction as creation/removal.
+The cap is recorded-file accounting; it is not a physical bucket/retention audit.
+
+Upload receipts bind the original actor, client, filename, size, type and key.
+A lost create reply replays that request; a lost completion checks the same stored
+object without a second PUT. Pending requests are saved on the server: after a
+refresh, confirm a file already sent or select the original file to resume the
+request. Interrupted transfers resend the whole file; this is not multipart or
+byte-offset resume. File handles/progress remain page-local. Internal view changes
+keep the upload queue mounted; leaving the page warns about pending work. Removed
+receipts remain tombstones, so retries/late confirmations cannot resurrect them.
+Uploader/admin removal requests object cleanup; earlier signed links retain expiry.
+
+Successful confirmation stores the provider ETag. Preview/download rechecks current
+access, readiness, size, MIME and that ETag, then rechecks current metadata before
+issuing a ten-minute link. Missing/changed originals produce explicit retryable
+errors and keep selected context. This is an object-version check at link issuance,
+not a full-file cryptographic checksum, immutable bucket guarantee or atomic
+cross-provider snapshot. Original signed PUT links expire after15minutes; previously
+issued GET links retain their lease. No provider polling occurs for library cards.
+
+Catalog reads use indexed scope/type or full-text filename search and bounded
+50-row pages. Failed refreshes keep qualified last-loaded rows; access failures
+hide them. Retry preserves the exact page cursor. A one-minute receipt labels the
+snapshot stale without background provider/read loops. Refresh invalidates older
+completed pages; pages are not one atomic cross-page snapshot. Counts are not
+invented from partial lists. Preview link expiry asks for a new verified link.
+
+Actual fresh compiled/local-backend acceptance covers generated photo/audio/video
+uploads, decoded previews, browser download plus exact original/Range bytes,
+committed lost replies, saved unfinished-request recovery after remount, source
+references, changed same-size originals, missing-file restoration, role denial and
+real object removal. A separate62-record metadata-only run covers50+11 exact-client
+pages, controlled503/retry, actual one-minute expiry without background reads,
+late-page rejection across client filters, search and genuine empty. It does not
+claim those metadata fixtures have playable files. Desktop/390px captures inspected.
+Synthetic auth and loopback S3/Mux remain distinct from actual Clerk/live providers.
+
+CMO approved-original downloads now check availability/known size/type and recheck
+current approval/version before signing. A missing/truncated original cannot yield
+a knowingly broken download link; recorded review approval remains intact. Recovery
+uses the same client selection and Download original action. Legacy records without
+known file size retain compatibility, with availability checked on demand.
+
+Run `bun run typecheck:convex` as well as root types, tests, lint and build. It now
+runs the actual strict Convex TypeScript project without deploying; Linux/Windows
+CI includes this independent backend check. Earlier root-only types could pass a
+candidate rejected by the local backend’s stricter target. No checks were relaxed.

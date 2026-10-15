@@ -11,7 +11,7 @@
     "start": "vite preview --port 5296",
     "lint": "eslint app src convex --ignore-pattern 'convex/_generated/**'",
     "typecheck": "tsc --noEmit",
-    "typecheck:convex": "bunx convex typecheck",
+    "typecheck:convex": "tsc --noEmit -p convex/tsconfig.json",
     "generate:og": "bun run scripts/generate-og.tsx",
     "test": "bun test src app tests"
   },
