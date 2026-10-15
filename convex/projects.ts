@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getUser, requireTeamAccess, requireProjectAccess } from "./auth";
-import { assertTeamHasActiveSubscription } from "./billingHelpers";
+import { assertTeamCanUseWorkspace } from "./billingHelpers";
+import { removeProjectAssets } from "./rawAssets";
+import { preserveOriginalRemoval } from "./mediaDeletionReceipts";
 
 export const create = mutation({
   args: {
@@ -11,7 +13,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireTeamAccess(ctx, args.teamId, "member");
-    await assertTeamHasActiveSubscription(ctx, args.teamId);
+    await assertTeamCanUseWorkspace(ctx, args.teamId);
 
     return await ctx.db.insert("projects", {
       teamId: args.teamId,
@@ -125,8 +127,11 @@ export const update = mutation({
 export const remove = mutation({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    await requireProjectAccess(ctx, args.projectId, "admin");
+    const { user } = await requireProjectAccess(ctx, args.projectId, "admin");
 
+    await removeProjectAssets(ctx, args.projectId);
+
+    for (const batch of await ctx.db.query("contentBatches").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect()) await ctx.db.delete(batch._id);
     // Delete all videos in the project
     const videos = await ctx.db
       .query("videos")
@@ -134,6 +139,7 @@ export const remove = mutation({
       .collect();
 
     for (const video of videos) {
+      await preserveOriginalRemoval(ctx, video, "project_deleted", user.subject);
       // Delete comments
       const comments = await ctx.db
         .query("comments")
@@ -162,6 +168,8 @@ export const remove = mutation({
       await ctx.db.delete(video._id);
     }
 
+    const assignments = await ctx.db.query("contentItems").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect();
+    for (const assignment of assignments) await ctx.db.delete(assignment._id);
     await ctx.db.delete(args.projectId);
   },
 });

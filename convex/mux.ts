@@ -1,6 +1,7 @@
 "use node";
 
 import Mux from "@mux/mux-node";
+import { muxUploadIdentity } from "./uploadIdentity";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -61,7 +62,7 @@ export function getMuxClient(): Mux {
   return cachedMux;
 }
 
-export async function createMuxAssetFromInputUrl(videoId: string, inputUrl: string) {
+export async function createMuxAssetFromInputUrl(videoId: string, inputUrl: string, uploadId: string) {
   const mux = getMuxClient();
   return await mux.video.assets.create({
     inputs: [{ url: inputUrl }],
@@ -70,7 +71,7 @@ export async function createMuxAssetFromInputUrl(videoId: string, inputUrl: stri
     // Mux currently supports 1080p as the lowest adaptive streaming max tier.
     max_resolution_tier: "1080p",
     mp4_support: "none",
-    passthrough: videoId,
+    passthrough: muxUploadIdentity(videoId, uploadId),
   });
 }
 

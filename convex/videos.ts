@@ -1,10 +1,20 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query, MutationCtx } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  MutationCtx,
+} from "./_generated/server";
 import { identityName, requireProjectAccess, requireVideoAccess } from "./auth";
 import { Id } from "./_generated/dataModel";
 import { generateUniqueToken } from "./security";
 import { resolveActiveShareGrant } from "./shareAccess";
+import { canProduceContent, canReviewContent } from "./contentWorkflow";
+import { mediaMode } from "./mediaPolicy";
+import { matchesMuxUpload } from "./uploadIdentity";
 import { assertTeamCanStoreBytes } from "./billingHelpers";
+import { preserveOriginalRemoval } from "./mediaDeletionReceipts";
 
 const workflowStatusValidator = v.union(
   v.literal("review"),
@@ -14,12 +24,11 @@ const workflowStatusValidator = v.union(
 
 const visibilityValidator = v.union(v.literal("public"), v.literal("private"));
 
-type WorkflowStatus =
-  | "review"
-  | "rework"
-  | "done";
+type WorkflowStatus = "review" | "rework" | "done";
 
-function normalizeWorkflowStatus(status: WorkflowStatus | undefined): WorkflowStatus {
+function normalizeWorkflowStatus(
+  status: WorkflowStatus | undefined,
+): WorkflowStatus {
   return status ?? "review";
 }
 
@@ -56,14 +65,30 @@ export const create = mutation({
     description: v.optional(v.string()),
     fileSize: v.optional(v.number()),
     contentType: v.optional(v.string()),
+    contentItemId: v.optional(v.id("contentItems")),
   },
   handler: async (ctx, args) => {
-    const { user, project } = await requireProjectAccess(ctx, args.projectId, "member");
+    const { user, project, membership } = await requireProjectAccess(
+      ctx,
+      args.projectId,
+      "member",
+    );
+    const item = args.contentItemId
+      ? await ctx.db.get(args.contentItemId)
+      : null;
+    if (
+      args.contentItemId &&
+      (!item ||
+        item.projectId !== args.projectId ||
+        !canProduceContent(item, user.subject, membership.role))
+    )
+      throw new Error("Only the assigned content team can upload this edit.");
     await assertTeamCanStoreBytes(ctx, project.teamId, args.fileSize ?? 0);
     const publicId = await generatePublicId(ctx);
 
     const videoId = await ctx.db.insert("videos", {
       projectId: args.projectId,
+      contentItemId: args.contentItemId,
       uploadedByClerkId: user.subject,
       uploaderName: identityName(user),
       title: args.title,
@@ -73,10 +98,16 @@ export const create = mutation({
       status: "uploading",
       muxAssetStatus: "preparing",
       workflowStatus: "review",
-      visibility: "public",
+      visibility: mediaMode() === "original" ? "private" : "public",
       publicId,
     });
 
+    if (item)
+      await ctx.db.patch(item._id, {
+        currentVideoId: videoId,
+        productionStatus: "in_progress",
+        updatedAt: Math.max(Date.now(), item.updatedAt + 1),
+      });
     return videoId;
   },
 });
@@ -84,7 +115,15 @@ export const create = mutation({
 export const list = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    await requireProjectAccess(ctx, args.projectId);
+    const { user, membership } = await requireProjectAccess(
+      ctx,
+      args.projectId,
+    );
+    const items = await ctx.db
+      .query("contentItems")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+    const itemsById = new Map(items.map((item) => [item._id, item]));
 
     const videos = await ctx.db
       .query("videos")
@@ -104,6 +143,15 @@ export const list = query({
           uploaderName: video.uploaderName ?? "Unknown",
           workflowStatus: normalizeWorkflowStatus(video.workflowStatus),
           commentCount: comments.length,
+          canReview:
+            membership.role !== "viewer" &&
+            (!video.contentItemId ||
+              (!!itemsById.get(video.contentItemId) &&
+                canReviewContent(
+                  itemsById.get(video.contentItemId)!,
+                  user.subject,
+                  membership.role,
+                ))),
         };
       }),
     );
@@ -113,12 +161,28 @@ export const list = query({
 export const get = query({
   args: { videoId: v.id("videos") },
   handler: async (ctx, args) => {
-    const { video, membership } = await requireVideoAccess(ctx, args.videoId);
+    const { video, membership, user } = await requireVideoAccess(
+      ctx,
+      args.videoId,
+    );
+    const item = video.contentItemId
+      ? await ctx.db.get(video.contentItemId)
+      : null;
     return {
       ...video,
       uploaderName: video.uploaderName ?? "Unknown",
       workflowStatus: normalizeWorkflowStatus(video.workflowStatus),
       role: membership.role,
+      canReview:
+        membership.role !== "viewer" &&
+        (!video.contentItemId ||
+          (item?.projectId === video.projectId &&
+            canReviewContent(item, user.subject, membership.role))),
+      canUpload:
+        membership.role !== "viewer" &&
+        (!video.contentItemId ||
+          (item?.projectId === video.projectId &&
+            canProduceContent(item, user.subject, membership.role))),
     };
   },
 });
@@ -161,7 +225,12 @@ export const getPublicIdByVideoId = query({
     }
 
     const video = await ctx.db.get(normalizedVideoId);
-    if (!video || video.visibility !== "public" || video.status !== "ready" || !video.publicId) {
+    if (
+      !video ||
+      video.visibility !== "public" ||
+      video.status !== "ready" ||
+      !video.publicId
+    ) {
       return null;
     }
 
@@ -236,8 +305,26 @@ export const updateWorkflowStatus = mutation({
     workflowStatus: workflowStatusValidator,
   },
   handler: async (ctx, args) => {
-    await requireVideoAccess(ctx, args.videoId, "member");
-
+    const { video, user, membership } = await requireVideoAccess(
+      ctx,
+      args.videoId,
+      "member",
+    );
+    if (video.status !== "ready")
+      throw new Error(
+        "Wait for the upload to finish processing before reviewing it.",
+      );
+    if (video.contentItemId) {
+      const item = await ctx.db.get(video.contentItemId);
+      if (
+        !item ||
+        item.projectId !== video.projectId ||
+        !canReviewContent(item, user.subject, membership.role)
+      )
+        throw new Error(
+          "Only the assigned director or a team admin can review this edit.",
+        );
+    }
     await ctx.db.patch(args.videoId, {
       workflowStatus: args.workflowStatus,
     });
@@ -247,7 +334,8 @@ export const updateWorkflowStatus = mutation({
 export const remove = mutation({
   args: { videoId: v.id("videos") },
   handler: async (ctx, args) => {
-    await requireVideoAccess(ctx, args.videoId, "admin");
+    const { video, user } = await requireVideoAccess(ctx, args.videoId, "admin");
+    await preserveOriginalRemoval(ctx, video, "video_deleted", user.subject);
 
     const comments = await ctx.db
       .query("comments")
@@ -266,6 +354,15 @@ export const remove = mutation({
       await ctx.db.delete(link._id);
     }
 
+    if (video?.contentItemId) {
+      const item = await ctx.db.get(video.contentItemId);
+      if (item?.currentVideoId === args.videoId)
+        await ctx.db.patch(item._id, {
+          currentVideoId: undefined,
+          productionStatus: "in_progress",
+          updatedAt: Math.max(Date.now(), item.updatedAt + 1),
+        });
+    }
     await ctx.db.delete(args.videoId);
   },
 });
@@ -278,8 +375,15 @@ export const setUploadInfo = internalMutation({
     contentType: v.string(),
   },
   handler: async (ctx, args) => {
+    const previous = await ctx.db.get(args.videoId);
+    if (previous?.s3Key && previous.s3Key !== args.s3Key) {
+      const actor = await ctx.auth.getUserIdentity();
+      await preserveOriginalRemoval(ctx, previous, "original_replaced", actor?.subject);
+    }
     await ctx.db.patch(args.videoId, {
       s3Key: args.s3Key,
+      s3ETag: undefined,
+      originalOnly: undefined,
       muxUploadId: undefined,
       muxAssetId: undefined,
       muxPlaybackId: undefined,
@@ -290,6 +394,8 @@ export const setUploadInfo = internalMutation({
       fileSize: args.fileSize,
       contentType: args.contentType,
       status: "uploading",
+      // A new original file needs a new review, even when the video ID is reused.
+      workflowStatus: "review",
     });
   },
 });
@@ -297,14 +403,20 @@ export const setUploadInfo = internalMutation({
 export const reconcileUploadedObjectMetadata = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.string(),
     fileSize: v.number(),
     contentType: v.string(),
+    storageETag: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const video = await ctx.db.get(args.videoId);
     if (!video) {
       throw new Error("Video not found");
     }
+
+    if (video.s3Key !== args.uploadId) return false;
+    if (video.s3ETag && args.storageETag && video.s3ETag !== args.storageETag)
+      throw new Error("The uploaded original changed. Upload a new edit.");
 
     const project = await ctx.db.get(video.projectId);
     if (!project) {
@@ -315,7 +427,9 @@ export const reconcileUploadedObjectMetadata = internalMutation({
       typeof video.fileSize === "number" && Number.isFinite(video.fileSize)
         ? Math.max(0, video.fileSize)
         : 0;
-    const actualSize = Number.isFinite(args.fileSize) ? Math.max(0, args.fileSize) : 0;
+    const actualSize = Number.isFinite(args.fileSize)
+      ? Math.max(0, args.fileSize)
+      : 0;
     const sizeDelta = actualSize - declaredSize;
 
     if (sizeDelta > 0) {
@@ -325,32 +439,69 @@ export const reconcileUploadedObjectMetadata = internalMutation({
     await ctx.db.patch(args.videoId, {
       fileSize: actualSize,
       contentType: args.contentType,
+      s3ETag: args.storageETag ?? video.s3ETag,
     });
+    return true;
+  },
+});
+
+export const markOriginalReady = internalMutation({
+  args: { videoId: v.id("videos"), uploadId: v.string() },
+  handler: async (ctx, args) => {
+    if (mediaMode() !== "original")
+      throw new Error("Original-only mode is not enabled.");
+    const video = await ctx.db.get(args.videoId);
+    if (!video || video.s3Key !== args.uploadId) return false;
+    if (video.status === "ready" && video.originalOnly) return false;
+    if (video.status !== "uploading" || !video.s3ETag) return false;
+    await ctx.db.patch(args.videoId, {
+      status: "ready",
+      originalOnly: true,
+      uploadError: undefined,
+      muxAssetStatus: undefined,
+      muxAssetId: undefined,
+      muxPlaybackId: undefined,
+    });
+    return true;
   },
 });
 
 export const markAsProcessing = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.string(),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (!video || video.s3Key !== args.uploadId)
+      throw new Error("This upload was replaced.");
+    if (video.status === "processing" || video.status === "ready") return false;
     await ctx.db.patch(args.videoId, {
       status: "processing",
       muxAssetStatus: "preparing",
       uploadError: undefined,
     });
+    return true;
   },
 });
 
 export const markAsReady = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.optional(v.string()),
     muxAssetId: v.string(),
     muxPlaybackId: v.string(),
     duration: v.optional(v.number()),
     thumbnailUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (
+      !video ||
+      !matchesMuxUpload(video, args) ||
+      (video.status !== "processing" && video.status !== "ready")
+    )
+      return false;
     await ctx.db.patch(args.videoId, {
       muxAssetId: args.muxAssetId,
       muxPlaybackId: args.muxPlaybackId,
@@ -360,44 +511,63 @@ export const markAsReady = internalMutation({
       uploadError: undefined,
       status: "ready",
     });
+    return true;
   },
 });
 
 export const markAsFailed = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.optional(v.string()),
+    muxAssetId: v.optional(v.string()),
+    muxUploadId: v.optional(v.string()),
     uploadError: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (!video || !matchesMuxUpload(video, args)) return false;
     await ctx.db.patch(args.videoId, {
       muxAssetStatus: "errored",
       uploadError: args.uploadError,
       status: "failed",
     });
+    return true;
   },
 });
 
 export const setMuxAssetReference = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.optional(v.string()),
     muxAssetId: v.string(),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (
+      !video ||
+      !matchesMuxUpload(video, args) ||
+      video.status !== "processing"
+    )
+      return false;
     await ctx.db.patch(args.videoId, {
       muxAssetId: args.muxAssetId,
       muxAssetStatus: "preparing",
       status: "processing",
     });
+    return true;
   },
 });
 
 export const setMuxPlaybackId = internalMutation({
   args: {
     videoId: v.id("videos"),
+    muxAssetId: v.string(),
     muxPlaybackId: v.string(),
     thumbnailUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (!video || video.muxAssetId !== args.muxAssetId) return;
     await ctx.db.patch(args.videoId, {
       muxPlaybackId: args.muxPlaybackId,
       thumbnailUrl: args.thumbnailUrl,
@@ -413,12 +583,14 @@ export const getVideoByMuxUploadId = internalQuery({
     v.object({
       videoId: v.id("videos"),
     }),
-    v.null()
+    v.null(),
   ),
   handler: async (ctx, args): Promise<{ videoId: Id<"videos"> } | null> => {
     const video = await ctx.db
       .query("videos")
-      .withIndex("by_mux_upload_id", (q) => q.eq("muxUploadId", args.muxUploadId))
+      .withIndex("by_mux_upload_id", (q) =>
+        q.eq("muxUploadId", args.muxUploadId),
+      )
       .unique();
 
     if (!video) return null;
@@ -434,7 +606,7 @@ export const getVideoByMuxAssetId = internalQuery({
     v.object({
       videoId: v.id("videos"),
     }),
-    v.null()
+    v.null(),
   ),
   handler: async (ctx, args): Promise<{ videoId: Id<"videos"> } | null> => {
     const video = await ctx.db

@@ -1,0 +1,583 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { convexTest } from "convex-test";
+import schema from "../convex/schema";
+import { api, internal } from "../convex/_generated/api";
+import type { Id } from "../convex/_generated/dataModel";
+
+const modules = {
+  "../convex/_generated/server.js": () => import("../convex/_generated/server"),
+  "../convex/contentBatches.ts": () => import("../convex/contentBatches"),
+  "../convex/contentItems.ts": () => import("../convex/contentItems"),
+  "../convex/videos.ts": () => import("../convex/videos"),
+  "../convex/projects.ts": () => import("../convex/projects"),
+  "../convex/teams.ts": () => import("../convex/teams"),
+};
+async function fixture() {
+  const t = convexTest(schema, modules);
+  const ids = await t.run(async (ctx) => {
+    const teamId = await ctx.db.insert("teams", {
+      name: "Synthetic agency",
+      slug: "synthetic",
+      ownerClerkId: "head",
+      plan: "basic",
+    });
+    const otherTeam = await ctx.db.insert("teams", {
+      name: "Other agency",
+      slug: "other",
+      ownerClerkId: "outsider",
+      plan: "basic",
+    });
+    for (const [subject, role] of [
+      ["head", "owner"],
+      ["director", "member"],
+      ["producer", "member"],
+      ["unassigned", "member"],
+      ["cmo", "viewer"],
+    ] as const)
+      await ctx.db.insert("teamMembers", {
+        teamId,
+        userClerkId: subject,
+        userEmail: `${subject}@example.invalid`,
+        userName: subject,
+        role,
+      });
+    const projectId = await ctx.db.insert("projects", {
+      teamId,
+      name: "Synthetic client",
+    });
+    const otherProjectId = await ctx.db.insert("projects", {
+      teamId: otherTeam,
+      name: "Other client",
+    });
+    const secondProjectId = await ctx.db.insert("projects", {
+      teamId,
+      name: "Different campaign",
+    });
+    return { teamId, projectId, otherProjectId, secondProjectId };
+  });
+  const head = t.withIdentity({ subject: "head" });
+  const producer = t.withIdentity({ subject: "producer" });
+  const director = t.withIdentity({ subject: "director" });
+  const cmo = t.withIdentity({ subject: "cmo" });
+  const input = {
+    projectId: ids.projectId,
+    requestKey: "original-request",
+    expectedActorId: "head",
+    title: "Product launch edit",
+    brief: "Make the benefit clear.",
+    producerClerkId: "producer",
+    directorClerkId: "director",
+    cmoClerkId: "cmo",
+    dueDate: "2026-10-30",
+  };
+  const video = (
+    projectId = ids.projectId,
+    workflowStatus: "review" | "rework" | "done" = "review",
+    status: "ready" | "processing" | "failed" = "ready",
+  ) =>
+    t.run((ctx) =>
+      ctx.db.insert("videos", {
+        projectId,
+        uploadedByClerkId: "producer",
+        uploaderName: "Producer",
+        title: "Synthetic edit",
+        visibility: "private",
+        publicId: crypto.randomUUID(),
+        status,
+        workflowStatus,
+      }),
+    );
+  const current = (itemId: Id<"contentItems">) =>
+    t.run((ctx) => ctx.db.get(itemId));
+  return { t, ...ids, head, producer, director, cmo, input, video, current };
+}
+
+test("original create retries once, rejects changed payload/account and survives later edits", async () => {
+  const f = await fixture();
+  const id = await f.head.mutation(api.contentItems.create, f.input);
+  assert.equal(await f.head.mutation(api.contentItems.create, f.input), id);
+  assert.equal(
+    (await f.t.run((ctx) => ctx.db.query("contentItems").collect())).length,
+    1,
+  );
+  await assert.rejects(
+    f.head.mutation(api.contentItems.create, {
+      ...f.input,
+      title: "Different",
+    }),
+    /original assignment/,
+  );
+  await assert.rejects(
+    f.head.mutation(api.contentItems.create, {
+      ...f.input,
+      expectedActorId: "other",
+    }),
+    /account changed/,
+  );
+  const item = await f.current(id);
+  await f.head.mutation(api.contentItems.update, {
+    itemId: id,
+    expectedUpdatedAt: item!.updatedAt,
+    title: "Updated brief",
+    brief: "Newer requirements",
+  });
+  assert.equal(await f.head.mutation(api.contentItems.create, f.input), id);
+  assert.equal((await f.current(id))!.title, "Updated brief");
+});
+
+test("only administrators assign; team boundaries and anonymous access fail closed", async () => {
+  const f = await fixture();
+  await assert.rejects(
+    f.producer.mutation(api.contentItems.create, f.input),
+    /admin/,
+  );
+  await assert.rejects(
+    f.cmo.mutation(api.contentItems.create, f.input),
+    /admin/,
+  );
+  await assert.rejects(
+    f.t.query(api.contentItems.list, { teamId: f.teamId }),
+    /authenticated/,
+  );
+  await assert.rejects(
+    f.head.query(api.contentItems.list, {
+      teamId: (await f.t.run((ctx) => ctx.db.get(f.otherProjectId)))!.teamId,
+    }),
+    /team member/,
+  );
+  assert.equal(
+    (await f.cmo.query(api.contentItems.list, { teamId: f.teamId })).canManage,
+    false,
+  );
+});
+
+test("assignments accept current CMO viewers but reject foreign or read-only producers", async () => {
+  const f = await fixture();
+  await f.head.mutation(api.contentItems.create, f.input);
+  await assert.rejects(
+    f.head.mutation(api.contentItems.create, {
+      ...f.input,
+      requestKey: "other",
+      producerClerkId: "cmo",
+    }),
+    /current members/,
+  );
+  await assert.rejects(
+    f.head.mutation(api.contentItems.create, {
+      ...f.input,
+      requestKey: "foreign",
+      directorClerkId: "outsider",
+    }),
+    /current members/,
+  );
+  for (const dueDate of ["2026-02-30", "tomorrow"])
+    await assert.rejects(
+      f.head.mutation(api.contentItems.create, {
+        ...f.input,
+        requestKey: dueDate,
+        dueDate,
+      }),
+    );
+});
+
+test("only the assigned content team can start or attach edits", async () => {
+  const f = await fixture();
+  const id = await f.head.mutation(api.contentItems.create, f.input);
+  await assert.rejects(
+    f.t
+      .withIdentity({ subject: "unassigned" })
+      .mutation(api.contentItems.start, { itemId: id }),
+    /assigned content team/,
+  );
+  await assert.rejects(
+    f.cmo.mutation(api.contentItems.start, { itemId: id }),
+    /member/,
+  );
+  await f.producer.mutation(api.contentItems.start, { itemId: id });
+  assert.equal((await f.current(id))!.productionStatus, "in_progress");
+  await assert.rejects(
+    f.producer.mutation(api.contentItems.linkVideo, {
+      itemId: id,
+      videoId: await f.video(f.otherProjectId),
+    }),
+    /assignment’s project/,
+  );
+  await assert.rejects(
+    f.producer.mutation(api.contentItems.linkVideo, {
+      itemId: id,
+      videoId: await f.video(f.secondProjectId),
+    }),
+    /assignment’s project/,
+  );
+});
+
+test("review is authoritative; the assigned director approves, producer and CMOs cannot self-approve", async () => {
+  const f = await fixture();
+  const id = await f.head.mutation(api.contentItems.create, f.input);
+  const videoId = await f.video();
+  await f.producer.mutation(api.contentItems.linkVideo, {
+    itemId: id,
+    videoId,
+  });
+  assert.equal(
+    (await f.producer.query(api.contentItems.list, { teamId: f.teamId }))
+      .items[0].stage,
+    "review",
+  );
+  assert.equal(
+    (await f.producer.query(api.videos.get, { videoId })).canReview,
+    false,
+  );
+  assert.equal(
+    (await f.director.query(api.videos.get, { videoId })).canReview,
+    true,
+  );
+  await assert.rejects(
+    f.producer.mutation(api.videos.updateWorkflowStatus, {
+      videoId,
+      workflowStatus: "done",
+    }),
+    /assigned director/,
+  );
+  await assert.rejects(
+    f.cmo.mutation(api.videos.updateWorkflowStatus, {
+      videoId,
+      workflowStatus: "done",
+    }),
+    /member/,
+  );
+  await f.director.mutation(api.videos.updateWorkflowStatus, {
+    videoId,
+    workflowStatus: "done",
+  });
+  assert.equal(
+    (await f.cmo.query(api.contentItems.list, { teamId: f.teamId }))
+      .readyVideos[0]._id,
+    videoId,
+  );
+  assert.equal(
+    (await f.cmo.query(api.contentItems.getReadyVideo, { videoId }))._id,
+    videoId,
+  );
+  await f.director.mutation(api.videos.updateWorkflowStatus, {
+    videoId,
+    workflowStatus: "rework",
+  });
+  assert.equal(
+    (await f.cmo.query(api.contentItems.list, { teamId: f.teamId })).readyVideos
+      .length,
+    0,
+  );
+  await assert.rejects(
+    f.cmo.query(api.contentItems.getReadyVideo, { videoId }),
+    /not currently approved/,
+  );
+});
+
+test("replacement and failed processing hide previous approvals; an old approval cannot finish the new edit", async () => {
+  const f = await fixture();
+  const id = await f.head.mutation(api.contentItems.create, f.input);
+  const old = await f.video(f.projectId, "done");
+  await f.producer.mutation(api.contentItems.linkVideo, {
+    itemId: id,
+    videoId: old,
+  });
+  const replacement = await f.video(f.projectId, "review", "processing");
+  await f.producer.mutation(api.contentItems.linkVideo, {
+    itemId: id,
+    videoId: replacement,
+  });
+  let data = await f.cmo.query(api.contentItems.list, { teamId: f.teamId });
+  assert.equal(data.items[0].stage, "in_progress");
+  assert.equal(data.readyVideos.length, 0);
+  await assert.rejects(
+    f.director.mutation(api.videos.updateWorkflowStatus, {
+      videoId: replacement,
+      workflowStatus: "done",
+    }),
+    /finish processing/,
+  );
+  await f.director.mutation(api.videos.updateWorkflowStatus, {
+    videoId: old,
+    workflowStatus: "done",
+  });
+  await assert.rejects(
+    f.cmo.query(api.contentItems.getReadyVideo, { videoId: old }),
+    /newer edit/,
+  );
+  await f.t.run((ctx) => ctx.db.patch(replacement, { status: "failed" }));
+  data = await f.cmo.query(api.contentItems.list, { teamId: f.teamId });
+  assert.equal(data.readyVideos.length, 0);
+  assert.equal(data.items[0].video!.status, "failed");
+});
+
+test("one edit cannot belong to two assignments and invalid saved links do not certify readiness", async () => {
+  const f = await fixture();
+  const first = await f.head.mutation(api.contentItems.create, f.input);
+  const second = await f.head.mutation(api.contentItems.create, {
+    ...f.input,
+    requestKey: "second",
+    title: "Other edit",
+  });
+  const videoId = await f.video(f.projectId, "done");
+  await f.producer.mutation(api.contentItems.linkVideo, {
+    itemId: first,
+    videoId,
+  });
+  await assert.rejects(
+    f.producer.mutation(api.contentItems.linkVideo, {
+      itemId: second,
+      videoId,
+    }),
+    /another assignment/,
+  );
+  await f.t.run((ctx) => ctx.db.patch(second, { currentVideoId: videoId }));
+  const data = await f.cmo.query(api.contentItems.list, { teamId: f.teamId });
+  assert.equal(
+    data.items.find((item) => item._id === second)!.stage,
+    "in_progress",
+  );
+});
+
+test("stale assignment edits fail instead of overwriting another person’s update", async () => {
+  const f = await fixture();
+  const id = await f.head.mutation(api.contentItems.create, f.input);
+  const before = await f.current(id);
+  await f.producer.mutation(api.contentItems.start, { itemId: id });
+  await assert.rejects(
+    f.head.mutation(api.contentItems.update, {
+      itemId: id,
+      expectedUpdatedAt: before!.updatedAt,
+      title: "Stale title",
+      brief: "Stale brief",
+    }),
+    /assignment changed/,
+  );
+  assert.equal((await f.current(id))!.title, f.input.title);
+});
+
+test("deleting a current edit leaves work in production and removing a project removes its assignments", async () => {
+  const f = await fixture();
+  const id = await f.head.mutation(api.contentItems.create, f.input);
+  const videoId = await f.video(f.projectId, "done");
+  await f.producer.mutation(api.contentItems.linkVideo, {
+    itemId: id,
+    videoId,
+  });
+  await f.head.mutation(api.videos.remove, { videoId });
+  assert.equal((await f.current(id))!.currentVideoId, undefined);
+  assert.equal(
+    (await f.cmo.query(api.contentItems.list, { teamId: f.teamId })).items[0]
+      .stage,
+    "in_progress",
+  );
+  await f.head.mutation(api.projects.remove, { projectId: f.projectId });
+  assert.equal(await f.current(id), null);
+});
+
+test("existing untracked approved videos remain available and retain member review access", async () => {
+  const f = await fixture();
+  const videoId = await f.video(f.projectId, "done");
+  assert.equal(
+    (await f.cmo.query(api.contentItems.list, { teamId: f.teamId }))
+      .readyVideos[0]._id,
+    videoId,
+  );
+  assert.equal(
+    (await f.producer.query(api.videos.get, { videoId })).canReview,
+    true,
+  );
+  await f.producer.mutation(api.videos.updateWorkflowStatus, {
+    videoId,
+    workflowStatus: "review",
+  });
+  assert.equal(
+    (await f.cmo.query(api.contentItems.list, { teamId: f.teamId })).readyVideos
+      .length,
+    0,
+  );
+});
+
+
+test("replacing bytes on the same video clears approval before processing can complete", async () => {
+  const f = await fixture();
+  const id = await f.head.mutation(api.contentItems.create, f.input);
+  const videoId = await f.video(f.projectId, "done");
+  await f.producer.mutation(api.contentItems.linkVideo, { itemId: id, videoId });
+  await f.t.mutation(internal.videos.setUploadInfo, { videoId, s3Key: "synthetic/replaced.mp4", fileSize: 123, contentType: "video/mp4" });
+  assert.equal((await f.producer.query(api.videos.get, { videoId })).workflowStatus, "review");
+  await f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "synthetic/replaced.mp4" });
+  await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId: "synthetic/replaced.mp4", muxAssetId: "synthetic-asset", muxPlaybackId: "synthetic-playback" });
+  assert.equal((await f.cmo.query(api.contentItems.list, { teamId: f.teamId })).readyVideos.length, 0);
+  await assert.rejects(f.cmo.query(api.contentItems.getReadyVideo, { videoId }), /not currently approved/);
+  const unassigned = f.t.withIdentity({ subject: "unassigned" });
+  assert.equal((await unassigned.query(api.videos.get, { videoId })).canUpload, false);
+  assert.equal((await f.producer.query(api.videos.get, { videoId })).canUpload, true);
+  await f.director.mutation(api.videos.updateWorkflowStatus, { videoId, workflowStatus: "done" });
+  assert.equal((await f.cmo.query(api.contentItems.list, { teamId: f.teamId })).readyVideos[0]._id, videoId);
+});
+
+test("old processing events cannot certify, fail or remap a new original", async () => {
+  const f = await fixture();
+  const videoId = await f.video();
+  await f.t.mutation(internal.videos.setUploadInfo, { videoId, s3Key: "current.mp4", fileSize: 100, contentType: "video/mp4" });
+  for (const uploadId of [undefined, "old.mp4"]) {
+    assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId, muxAssetId: "old", muxPlaybackId: "old-playback" }), false);
+    assert.equal(await f.t.mutation(internal.videos.setMuxAssetReference, { videoId, uploadId, muxAssetId: "old" }), false);
+    assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, uploadId, muxAssetId: "old", uploadError: "old error" }), false);
+  }
+  assert.equal((await f.producer.query(api.videos.get, { videoId })).status, "uploading");
+  assert.equal(await f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "current.mp4" }), true);
+  assert.equal(await f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "current.mp4" }), false);
+  assert.equal(await f.t.mutation(internal.videos.setMuxAssetReference, { videoId, uploadId: "current.mp4", muxAssetId: "current" }), true);
+  assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId: "current.mp4", muxAssetId: "different", muxPlaybackId: "wrong" }), false);
+  assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId: "current.mp4", muxAssetId: "current", muxPlaybackId: "current-playback" }), true);
+  assert.equal(await f.t.mutation(internal.videos.setMuxAssetReference, { videoId, uploadId: "current.mp4", muxAssetId: "current" }), false);
+  assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, uploadId: "old.mp4", muxAssetId: "old" }), false);
+  assert.equal((await f.producer.query(api.videos.get, { videoId })).status, "ready");
+});
+
+test("cancellation keeps late ready events from reviving an abandoned upload", async () => {
+  const f = await fixture(); const videoId = await f.video();
+  await f.t.mutation(internal.videos.setUploadInfo, { videoId, s3Key: "cancelled.mp4", fileSize: 100, contentType: "video/mp4" });
+  await f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "cancelled.mp4" });
+  assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, uploadId: "cancelled.mp4" }), true);
+  assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId: "cancelled.mp4", muxAssetId: "late", muxPlaybackId: "late" }), false);
+  assert.equal((await f.producer.query(api.videos.get, { videoId })).status, "failed");
+});
+
+test("legacy events require a concrete current asset or upload reference", async () => {
+  const f = await fixture(); const videoId = await f.video(f.projectId, "review", "processing");
+  await f.t.run(ctx => ctx.db.patch(videoId, { muxAssetId: "legacy-asset", muxUploadId: "legacy-upload" }));
+  assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, muxAssetId: "legacy-asset", muxPlaybackId: "legacy-playback" }), true);
+  assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, muxUploadId: "foreign-upload" }), false);
+  assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, muxUploadId: "legacy-upload" }), true);
+});
+
+test("stale original metadata and playback resolutions cannot overwrite a replacement", async () => {
+  const f = await fixture(); const videoId = await f.video();
+  await f.t.mutation(internal.videos.setUploadInfo, { videoId, s3Key: "current.mp4", fileSize: 100, contentType: "video/mp4" });
+  assert.equal(await f.t.mutation(internal.videos.reconcileUploadedObjectMetadata, { videoId, uploadId: "old.mp4", fileSize: 3, contentType: "video/webm" }), false);
+  await assert.rejects(f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "old.mp4" }), /replaced/);
+  await f.t.mutation(internal.videos.setMuxPlaybackId, { videoId, muxAssetId: "old", muxPlaybackId: "old-playback" });
+  const current = await f.producer.query(api.videos.get, { videoId });
+  assert.equal(current.fileSize, 100); assert.equal(current.contentType, "video/mp4"); assert.equal(current.muxPlaybackId, undefined);
+});
+
+test("one client workload atomically creates its slots and exact retry never doubles the count", async () => {
+  const f=await fixture();
+  const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Team one",directorClerkId:"director",producerClerkId:"producer"});
+  const input={projectId:f.projectId,productionTeamId:pair,quantity:12,dueDate:"2026-10-30",notes:"Client workload, directors plan the individual ads.",requestKey:"batch-original",expectedActorId:"head"};
+  const id=await f.head.mutation(api.contentBatches.create,input);
+  assert.equal(await f.head.mutation(api.contentBatches.create,input),id);
+  const data=await f.head.query(api.contentItems.list,{teamId:f.teamId});assert.equal(data.items.length,12);assert.equal(data.batches.length,1);
+  for(const item of data.items){assert.equal(item.batchId,id);assert.equal(item.producerClerkId,"producer");assert.equal(item.directorClerkId,"director");assert.equal(item.dueDate,input.dueDate);}
+  await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,quantity:13}),/original workload/);
+  await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,expectedActorId:"director"}),/account changed/);
+  // A later roster change does not rewrite the saved assignment or lost reply.
+  const roster=data.productionTeams[0];await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,productionTeamId:pair,expectedUpdatedAt:roster.updatedAt,name:"Team one renamed",directorClerkId:"unassigned",producerClerkId:"producer"});
+  assert.equal(await f.head.mutation(api.contentBatches.create,input),id);
+  assert((await f.head.query(api.contentItems.list,{teamId:f.teamId})).items.every(i=>i.directorClerkId==="director"));
+});
+
+test("two content teams can receive clients independently; director planning cannot alter assignments", async () => {
+  const f=await fixture();await f.t.run(async ctx=>{for(const subject of ["director2","producer2"])await ctx.db.insert("teamMembers",{teamId:f.teamId,userClerkId:subject,userName:subject,userEmail:subject+"@example.invalid",role:"member"})});
+  const pairA=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"A",directorClerkId:"director",producerClerkId:"producer"}),pairB=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"B",directorClerkId:"director2",producerClerkId:"producer2"});
+  for(const [projectId,productionTeamId,quantity] of [[f.projectId,pairA,3],[f.secondProjectId,pairB,2]] as const)await f.head.mutation(api.contentBatches.create,{projectId,productionTeamId,quantity,dueDate:"2026-10-30",notes:"",requestKey:projectId,expectedActorId:"head"});
+  const data=await f.head.query(api.contentItems.list,{teamId:f.teamId}),item=data.items.find(i=>i.projectId===f.projectId)!;
+  await f.director.mutation(api.contentItems.plan,{itemId:item._id,expectedUpdatedAt:item.updatedAt,title:"Director's planned hook",brief:"Prep, film together, then producer edits."});
+  const planned=await f.current(item._id);assert.equal(planned?.title,"Director's planned hook");assert.equal(planned?.producerClerkId,"producer");assert.equal(planned?.dueDate,"2026-10-30");assert(planned?.plannedAt);
+  await assert.rejects(f.producer.mutation(api.contentItems.plan,{itemId:item._id,expectedUpdatedAt:planned!.updatedAt,title:"Denied",brief:""}),/assigned director/);
+  const foreign=data.items.find(i=>i.projectId===f.secondProjectId)!;await assert.rejects(f.director.mutation(api.contentItems.plan,{itemId:foreign._id,expectedUpdatedAt:foreign.updatedAt,title:"Denied",brief:""}),/assigned director/);
+  await assert.rejects(f.director.mutation(api.contentItems.plan,{itemId:item._id,expectedUpdatedAt:item.updatedAt,title:"Stale",brief:""}),/changed/);
+});
+
+test("workload bounds, dates, team identity and administrative permissions fail before creating slots", async () => {
+  const f=await fixture();const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"A",directorClerkId:"director",producerClerkId:"producer"});const input={projectId:f.projectId,productionTeamId:pair,quantity:2,dueDate:"2026-10-30",notes:"",requestKey:"new",expectedActorId:"head"};
+  for(const quantity of [0,-1,1.5,101])await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,quantity}),/between/);
+  await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,dueDate:"2026-02-30"}),/valid due date/);
+  await assert.rejects(f.producer.mutation(api.contentBatches.create,{...input,expectedActorId:"producer"}),/admin/);
+  await assert.rejects(f.cmo.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Denied",directorClerkId:"director",producerClerkId:"producer"}),/admin/);
+  await assert.rejects(f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Bad",directorClerkId:"cmo",producerClerkId:"producer"}),/editing access/);
+  assert.equal((await f.head.query(api.contentItems.list,{teamId:f.teamId})).items.length,0);
+  await f.head.mutation(api.contentBatches.create,input);await f.head.mutation(api.projects.remove,{projectId:f.projectId});assert.equal((await f.head.query(api.contentItems.list,{teamId:f.teamId})).batches.length,0);
+});
+
+
+test("invited content pair creates exact workload before joining then acceptance resolves only explicit snapshots", async()=>{
+  const f=await fixture();
+  const directorEmail="new-director@example.invalid",producerEmail="new-producer@example.invalid";
+  const directorToken=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email:directorEmail,role:"member"});
+  const producerToken=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email:producerEmail,role:"admin"});
+  const pairInput={teamId:f.teamId,name:"Pending pair",directorPendingEmail:" NEW-DIRECTOR@example.invalid ",producerPendingEmail:producerEmail};
+  const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,pairInput);
+  assert.equal(await f.head.mutation(api.contentBatches.saveProductionTeam,pairInput),pair);
+  const input={projectId:f.projectId,productionTeamId:pair,quantity:3,dueDate:"2026-10-30",notes:"Plan before first login",requestKey:"pending-batch",expectedActorId:"head"};
+  const batch=await f.head.mutation(api.contentBatches.create,input);
+  const before=await f.head.query(api.contentItems.list,{teamId:f.teamId});
+  assert.deepEqual(before.pendingMembers,[{email:directorEmail,role:"member"},{email:producerEmail,role:"admin"}]);
+  assert(before.pendingMembers.every(person=>Object.keys(person).sort().join(",")==="email,role"));
+  assert.deepEqual((await f.producer.query(api.contentItems.list,{teamId:f.teamId})).pendingMembers,[]);
+  assert.equal(before.items.length,3);assert(before.items.every(item=>item.directorClerkId===undefined && item.directorPendingEmail===directorEmail && item.producerPendingEmail===producerEmail));
+  const pendingDirector=f.t.withIdentity({subject:"new-director-sub",email:directorEmail});
+  await assert.rejects(pendingDirector.query(api.contentItems.list,{teamId:f.teamId}));
+  await assert.rejects(pendingDirector.mutation(api.contentItems.plan,{itemId:before.items[0]._id,expectedUpdatedAt:before.items[0].updatedAt,title:"No access yet",brief:""}));
+  // Editing a roster does not rewrite work already assigned to its earlier pending director.
+  await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,productionTeamId:pair,expectedUpdatedAt:before.productionTeams[0].updatedAt,name:"Changed roster",directorClerkId:"unassigned",producerPendingEmail:producerEmail});
+  const foreign=await f.t.run(async ctx=>{const project=await ctx.db.get(f.otherProjectId);return ctx.db.insert("productionTeams",{teamId:project!.teamId,name:"Other workspace pending same email",directorPendingEmail:directorEmail,producerClerkId:"outsider",updatedAt:1});});
+  await pendingDirector.mutation(api.teams.acceptInvite,{token:directorToken});
+  let data=await f.head.query(api.contentItems.list,{teamId:f.teamId});
+  assert(data.items.every(item=>item.directorClerkId==="new-director-sub" && item.directorPendingEmail===undefined && item.producerClerkId===undefined && item.producerPendingEmail===producerEmail));
+  assert(data.items.every(item=>item.updatedAt>before.items.find(old=>old._id===item._id)!.updatedAt));
+  assert.equal(data.productionTeams[0].directorClerkId,"unassigned");
+  assert.equal((await f.t.run(ctx=>ctx.db.get(foreign)))?.directorPendingEmail,directorEmail);
+  assert.equal(await f.head.mutation(api.contentBatches.create,input),batch);assert.equal(data.items.length,3);
+  await pendingDirector.mutation(api.contentItems.plan,{itemId:data.items[0]._id,expectedUpdatedAt:data.items[0].updatedAt,title:"Now assigned director can plan",brief:"Actual accepted membership"});
+  const pendingProducer=f.t.withIdentity({subject:"new-producer-sub",email:producerEmail});await pendingProducer.mutation(api.teams.acceptInvite,{token:producerToken});
+  data=await f.head.query(api.contentItems.list,{teamId:f.teamId});assert(data.items.every(item=>item.producerClerkId==="new-producer-sub" && item.producerPendingEmail===undefined));assert.equal(data.productionTeams[0].producerClerkId,"new-producer-sub");assert.equal(data.productionTeams[0].producerPendingEmail,undefined);
+  assert.equal((await pendingProducer.query(api.teams.list,{})).find(team=>team._id===f.teamId)?.role,"admin");
+});
+
+test("pending assignments reject invalid scope, ambiguous roles, expired revoked and viewer invitations without writes",async()=>{
+  const f=await fixture();const email="pending@example.invalid";
+  const token=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"member"});
+  const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Pair",directorPendingEmail:email,producerClerkId:"producer"});
+  const input={projectId:f.projectId,productionTeamId:pair,quantity:2,dueDate:"2026-10-30",notes:"",requestKey:"first",expectedActorId:"head"};
+  for(const details of [{directorClerkId:"director",directorPendingEmail:email},{directorPendingEmail:undefined},{directorPendingEmail:"missing@example.invalid"}])await assert.rejects(f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Invalid",producerClerkId:"producer",...details}));
+  const stranger=f.t.withIdentity({subject:"wrong",email:"wrong@example.invalid"});await assert.rejects(stranger.mutation(api.teams.acceptInvite,{token}),/different email/);
+  await f.t.run(async ctx=>{const invite=await ctx.db.query("teamInvites").withIndex("by_token",q=>q.eq("token",token)).unique();await ctx.db.patch(invite!._id,{expiresAt:Date.now()-1});});
+  await assert.rejects(f.head.mutation(api.contentBatches.create,input),/current content-team invitation/);
+  await assert.rejects(f.t.withIdentity({subject:"pending",email}).mutation(api.teams.acceptInvite,{token}),/expired/);
+  await f.t.run(async ctx=>{const invite=await ctx.db.query("teamInvites").withIndex("by_token",q=>q.eq("token",token)).unique();await ctx.db.delete(invite!._id);});
+  await assert.rejects(f.head.mutation(api.contentBatches.create,input),/current content-team invitation/);
+  await assert.rejects(f.t.withIdentity({subject:"pending",email}).mutation(api.teams.acceptInvite,{token}),/Invalid invite/);
+  // An invitation in another workspace cannot qualify this workspace's saved pair.
+  await f.t.run(async ctx=>{const project=await ctx.db.get(f.otherProjectId);await ctx.db.insert("teamInvites",{teamId:project!.teamId,email,role:"member",invitedByClerkId:"outsider",invitedByName:"Other owner",token:"other-workspace-token",expiresAt:Date.now()+60000});});
+  await assert.rejects(f.head.mutation(api.contentBatches.create,input),/current content-team invitation/);
+  await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"viewer"});
+  await assert.rejects(f.head.mutation(api.contentBatches.create,input),/current content-team invitation/);
+  assert.equal((await f.head.query(api.contentItems.list,{teamId:f.teamId})).items.length,0);
+});
+
+test("resending or downgrading an invite cannot bind a viewer or mutate the original workload receipt",async()=>{
+  const f=await fixture();const email="future-editor@example.invalid";
+  const oldToken=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"member"});
+  const pair=await f.head.mutation(api.contentBatches.saveProductionTeam,{teamId:f.teamId,name:"Pending editor",directorClerkId:"director",producerPendingEmail:email});
+  const input={projectId:f.projectId,productionTeamId:pair,quantity:1,dueDate:"2026-10-30",notes:"",requestKey:"frozen-batch",expectedActorId:"head"};const batch=await f.head.mutation(api.contentBatches.create,input);
+  const viewerToken=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"viewer"});
+  const person=f.t.withIdentity({subject:"future-editor-sub",email});
+  await assert.rejects(person.mutation(api.teams.acceptInvite,{token:oldToken}),/Invalid invite/);
+  await assert.rejects(f.head.mutation(api.contentBatches.create,{...input,requestKey:"new-work"}),/current content-team invitation/);
+  await person.mutation(api.teams.acceptInvite,{token:viewerToken});
+  const data=await person.query(api.contentItems.list,{teamId:f.teamId});assert.equal(data.canManage,false);assert.equal(data.canBrowseRaw,false);assert.equal(data.items[0].canProduce,false);assert.equal(data.items[0].producerClerkId,undefined);assert.equal(data.items[0].producerPendingEmail,email);
+  assert.equal(await f.head.mutation(api.contentBatches.create,input),batch);assert.equal(data.items.length,1);
+});
+
+test("pending standalone assignment receipts survive accepted invitations and real reassignments clear pending references",async()=>{
+  const f=await fixture();const email="new-planner@example.invalid";const token=await f.head.mutation(api.teams.inviteMember,{teamId:f.teamId,email,role:"member"});
+  const input={...f.input,directorClerkId:undefined,directorPendingEmail:email,requestKey:"standalone-pending"};const id=await f.head.mutation(api.contentItems.create,input);
+  const actor=f.t.withIdentity({subject:"new-planner-sub",email});await actor.mutation(api.teams.acceptInvite,{token});assert.equal(await f.head.mutation(api.contentItems.create,input),id);
+  const item=await f.current(id);assert.equal(item?.directorClerkId,"new-planner-sub");assert.equal(item?.directorPendingEmail,undefined);
+  await f.head.mutation(api.contentItems.update,{itemId:id,expectedUpdatedAt:item!.updatedAt,title:item!.title,brief:item!.brief,directorClerkId:"director",producerClerkId:"producer"});const reassigned=await f.current(id);assert.equal(reassigned?.directorClerkId,"director");assert.equal(reassigned?.directorPendingEmail,undefined);
+});

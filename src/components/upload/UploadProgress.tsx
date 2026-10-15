@@ -5,7 +5,13 @@ import { formatBytes } from "@/lib/utils";
 import { X, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export type UploadStatus = "pending" | "uploading" | "processing" | "complete" | "error";
+export type UploadStatus =
+  | "pending"
+  | "uploading"
+  | "processing"
+  | "complete"
+  | "error"
+  | "unconfirmed";
 
 function formatSpeed(bytesPerSecond: number): string {
   if (bytesPerSecond === 0) return "—";
@@ -28,6 +34,7 @@ interface UploadProgressProps {
   bytesPerSecond?: number;
   estimatedSecondsRemaining?: number | null;
   onCancel?: () => void;
+  onRetryConfirmation?: () => void;
 }
 
 export function UploadProgress({
@@ -39,19 +46,22 @@ export function UploadProgress({
   bytesPerSecond = 0,
   estimatedSecondsRemaining = null,
   onCancel,
+  onRetryConfirmation,
 }: UploadProgressProps) {
   return (
-    <div className="border-2 border-[#1a1a1a] p-4 bg-[#f0f0e8]">
+    <div className="rounded-xl border border-line p-4 bg-[var(--surface)]">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-[#1a1a1a] truncate text-sm">{fileName}</p>
+          <p className="font-bold text-[#1a1a1a] truncate text-sm">
+            {fileName}
+          </p>
           <p className="text-xs text-[#888] mt-0.5">{formatBytes(fileSize)}</p>
         </div>
         <div className="flex items-center gap-2">
           {status === "complete" && (
-            <CheckCircle className="h-5 w-5 text-[#2d5a2d]" />
+            <CheckCircle className="h-5 w-5 text-[var(--success)]" />
           )}
-          {status === "error" && (
+          {(status === "error" || status === "unconfirmed") && (
             <AlertCircle className="h-5 w-5 text-[#dc2626]" />
           )}
           {status === "processing" && (
@@ -77,9 +87,13 @@ export function UploadProgress({
             <span>{formatSpeed(bytesPerSecond)}</span>
             <span>
               {progress}%
-              {estimatedSecondsRemaining !== null && estimatedSecondsRemaining > 0 && (
-                <span className="text-[#888]"> · {formatTimeRemaining(estimatedSecondsRemaining)} left</span>
-              )}
+              {estimatedSecondsRemaining !== null &&
+                estimatedSecondsRemaining > 0 && (
+                  <span className="text-[#888]">
+                    {" "}
+                    · {formatTimeRemaining(estimatedSecondsRemaining)} left
+                  </span>
+                )}
             </span>
           </div>
         </div>
@@ -89,8 +103,13 @@ export function UploadProgress({
         <p className="text-xs text-[#888] mt-2">Processing video...</p>
       )}
 
-      {status === "error" && error && (
+      {(status === "error" || status === "unconfirmed") && error && (
         <p className="text-xs text-[#dc2626] mt-2">{error}</p>
+      )}
+      {status === "unconfirmed" && onRetryConfirmation && (
+        <Button className="mt-3" onClick={onRetryConfirmation}>
+          Retry confirmation
+        </Button>
       )}
     </div>
   );

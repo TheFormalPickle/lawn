@@ -2,7 +2,41 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  // Internal provenance only; no object-deletion executor. Receipts survive
+  // removal of their source workspace/project/video.
+  mediaDeletionReceipts: defineTable({
+    status: v.literal("pending_review"),
+    storageBinding: v.literal("unknown"),
+    uploadLease: v.literal("unknown"),
+    videoId: v.id("videos"),
+    projectId: v.id("projects"),
+    teamId: v.optional(v.id("teams")),
+    contentItemId: v.optional(v.id("contentItems")),
+    storageKey: v.string(),
+    storageETag: v.optional(v.string()),
+    fileSize: v.optional(v.number()),
+    contentType: v.optional(v.string()),
+    originalOnly: v.optional(v.boolean()),
+    videoStatus: v.union(
+      v.literal("uploading"),
+      v.literal("processing"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+    uploadedBySubject: v.string(),
+    requestedBySubject: v.optional(v.string()),
+    reason: v.union(
+      v.literal("video_deleted"),
+      v.literal("project_deleted"),
+      v.literal("workspace_deleted"),
+      v.literal("original_replaced"),
+    ),
+    recordedAt: v.number(),
+  }).index("by_original", ["videoId", "storageKey", "storageETag"]),
+
   teams: defineTable({
+    rawAssetBytes: v.optional(v.number()),
+    rawCatalogRevision: v.optional(v.number()),
     name: v.string(),
     slug: v.string(),
     ownerClerkId: v.string(),
@@ -10,7 +44,7 @@ export default defineSchema({
       v.literal("basic"),
       v.literal("pro"),
       v.literal("free"),
-      v.literal("team")
+      v.literal("team"),
     ),
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
@@ -32,7 +66,7 @@ export default defineSchema({
       v.literal("owner"),
       v.literal("admin"),
       v.literal("member"),
-      v.literal("viewer")
+      v.literal("viewer"),
     ),
   })
     .index("by_team", ["teamId"])
@@ -43,11 +77,7 @@ export default defineSchema({
   teamInvites: defineTable({
     teamId: v.id("teams"),
     email: v.string(),
-    role: v.union(
-      v.literal("admin"),
-      v.literal("member"),
-      v.literal("viewer")
-    ),
+    role: v.union(v.literal("admin"), v.literal("member"), v.literal("viewer")),
     invitedByClerkId: v.string(),
     invitedByName: v.string(),
     token: v.string(),
@@ -63,8 +93,99 @@ export default defineSchema({
     description: v.optional(v.string()),
   }).index("by_team", ["teamId"]),
 
+  productionTeams: defineTable({
+    teamId: v.id("teams"),
+    name: v.string(),
+    directorClerkId: v.optional(v.string()),
+    directorPendingEmail: v.optional(v.string()),
+    producerClerkId: v.optional(v.string()),
+    producerPendingEmail: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_team", ["teamId"]),
+
+  contentBatches: defineTable({
+    teamId: v.id("teams"),
+    projectId: v.id("projects"),
+    productionTeamId: v.id("productionTeams"),
+    productionTeamName: v.string(),
+    quantity: v.number(),
+    dueDate: v.string(),
+    notes: v.string(),
+    createdByClerkId: v.string(),
+    requestKey: v.string(),
+    requestSignature: v.string(),
+  })
+    .index("by_team", ["teamId"])
+    .index("by_project", ["projectId"])
+    .index("by_creator_request", ["teamId", "createdByClerkId", "requestKey"]),
+
+  contentItems: defineTable({
+    sourceAssetIds: v.optional(v.array(v.id("rawAssets"))),
+    batchId: v.optional(v.id("contentBatches")),
+    plannedAt: v.optional(v.number()),
+    sequence: v.optional(v.number()),
+    teamId: v.id("teams"),
+    projectId: v.id("projects"),
+    title: v.string(),
+    brief: v.string(),
+    producerClerkId: v.optional(v.string()),
+    producerPendingEmail: v.optional(v.string()),
+    directorClerkId: v.optional(v.string()),
+    directorPendingEmail: v.optional(v.string()),
+    cmoClerkId: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+    productionStatus: v.union(v.literal("planned"), v.literal("in_progress")),
+    currentVideoId: v.optional(v.id("videos")),
+    createdByClerkId: v.string(),
+    requestKey: v.string(),
+    requestSignature: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_team", ["teamId"])
+    .index("by_project", ["projectId"])
+    .index("by_creator_request", ["teamId", "createdByClerkId", "requestKey"]),
+
+  rawAssets: defineTable({
+    teamId: v.id("teams"),
+    projectId: v.optional(v.id("projects")),
+    filename: v.string(),
+    fileSize: v.number(),
+    contentType: v.string(),
+    kind: v.union(v.literal("video"), v.literal("photo"), v.literal("audio")),
+    searchText: v.string(),
+    uploadedByClerkId: v.string(),
+    uploadedByName: v.string(),
+    requestKey: v.string(),
+    requestSignature: v.string(),
+    storageKey: v.optional(v.string()),
+    storageETag: v.optional(v.string()),
+    status: v.union(
+      v.literal("uploading"),
+      v.literal("ready"),
+      v.literal("removed"),
+    ),
+  })
+    .index("by_team", ["teamId"])
+    .index("by_project", ["projectId"])
+    .index("by_team_status", ["teamId", "status"])
+    .index("by_team_status_scope", ["teamId", "status", "projectId"])
+    .index("by_team_status_scope_kind", [
+      "teamId",
+      "status",
+      "projectId",
+      "kind",
+    ])
+    .index("by_team_status_kind", ["teamId", "status", "kind"])
+    .index("by_team_status_uploader", ["teamId", "status", "uploadedByClerkId"])
+    .index("by_creator_request", ["teamId", "uploadedByClerkId", "requestKey"])
+    .searchIndex("search_files", {
+      searchField: "searchText",
+      filterFields: ["teamId", "projectId", "kind", "status"],
+    }),
+
   videos: defineTable({
     projectId: v.id("projects"),
+    contentItemId: v.optional(v.id("contentItems")),
     uploadedByClerkId: v.string(),
     uploaderName: v.string(),
     title: v.string(),
@@ -76,14 +197,12 @@ export default defineSchema({
     muxAssetId: v.optional(v.string()),
     muxPlaybackId: v.optional(v.string()),
     muxAssetStatus: v.optional(
-      v.union(
-        v.literal("preparing"),
-        v.literal("ready"),
-        v.literal("errored")
-      )
+      v.union(v.literal("preparing"), v.literal("ready"), v.literal("errored")),
     ),
     // Metadata
     s3Key: v.optional(v.string()),
+    s3ETag: v.optional(v.string()),
+    originalOnly: v.optional(v.boolean()),
     duration: v.optional(v.number()),
     thumbnailUrl: v.optional(v.string()),
     fileSize: v.optional(v.number()),
@@ -93,7 +212,7 @@ export default defineSchema({
       v.literal("uploading"),
       v.literal("processing"),
       v.literal("ready"),
-      v.literal("failed")
+      v.literal("failed"),
     ),
     workflowStatus: v.union(
       v.literal("review"),

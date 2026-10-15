@@ -1,7 +1,10 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { getUser, identityAvatarUrl, identityEmail, identityName, requireUser, requireTeamAccess } from "./auth";
+import { deploymentBillingPolicy } from "./deploymentBilling";
 import { getTeamSubscriptionState } from "./billingHelpers";
+import { preserveOriginalRemoval } from "./mediaDeletionReceipts";
 
 function normalizedEmail(value: string) {
   return value.trim().toLowerCase();
@@ -85,7 +88,7 @@ export const list = query({
     const teams = await Promise.all(
       memberships.map(async (membership) => {
         const team = await ctx.db.get(membership.teamId);
-        return team ? { ...team, role: membership.role } : null;
+        return team ? { ...team, role: membership.role, billingMode: deploymentBillingPolicy().mode } : null;
       })
     );
 
@@ -128,7 +131,7 @@ export const listWithProjects = query({
           })
         );
           
-        return { ...team, role: membership.role, projects: projectsWithCounts };
+        return { ...team, role: membership.role, billingMode: deploymentBillingPolicy().mode, projects: projectsWithCounts };
       })
     );
 
@@ -256,7 +259,7 @@ export const acceptInvite = mutation({
       throw new Error("Invalid invite");
     }
 
-    if (invite.expiresAt < Date.now()) {
+    if (invite.expiresAt <= Date.now()) {
       throw new Error("Invite has expired");
     }
 
@@ -284,6 +287,24 @@ export const acceptInvite = mutation({
       role: invite.role,
     });
 
+    // Membership and explicit pending assignments resolve in this same transaction.
+    // A viewer invitation never grants content permissions or replaces an actual assignee.
+    if(invite.role!=="viewer") {
+      const email=normalizedEmail(invite.email);
+      for(const table of ["productionTeams","contentItems"] as const) {
+        const records=await ctx.db.query(table).withIndex("by_team",q=>q.eq("teamId",invite.teamId)).collect();
+        for(const record of records) {
+          const director=!record.directorClerkId && record.directorPendingEmail===email;
+          const producer=!record.producerClerkId && record.producerPendingEmail===email;
+          if(!director && !producer) continue;
+          await ctx.db.patch(record._id,{
+            ...(director?{directorClerkId:user.subject,directorPendingEmail:undefined}:{}),
+            ...(producer?{producerClerkId:user.subject,producerPendingEmail:undefined}:{}),
+            updatedAt:Math.max(Date.now(),record.updatedAt+1),
+          });
+        }
+      }
+    }
     await ctx.db.delete(invite._id);
 
     const team = await ctx.db.get(invite.teamId);
@@ -388,13 +409,20 @@ export const leave = mutation({
 export const deleteTeam = mutation({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
-    await requireTeamAccess(ctx, args.teamId, "owner");
+    const { user } = await requireTeamAccess(ctx, args.teamId, "owner");
     const subscriptionState = await getTeamSubscriptionState(ctx, args.teamId);
     if (subscriptionState.hasActiveSubscription) {
       throw new Error(
         "Cannot delete a team with an active subscription. Cancel billing first in team settings.",
       );
     }
+
+    for (const asset of await ctx.db.query("rawAssets").withIndex("by_team", q => q.eq("teamId", args.teamId)).collect()) {
+      if (asset.storageKey) await ctx.scheduler.runAfter(0, internal.rawAssetActions.deleteBytes, { key: asset.storageKey });
+      await ctx.db.delete(asset._id);
+    }
+    for (const table of ["contentBatches", "productionTeams"] as const)
+      for (const row of await ctx.db.query(table).withIndex("by_team", q => q.eq("teamId", args.teamId)).collect()) await ctx.db.delete(row._id);
 
     // Delete all team members
     const members = await ctx.db
@@ -421,12 +449,15 @@ export const deleteTeam = mutation({
       .collect();
 
     for (const project of projects) {
+      const assignments = await ctx.db.query("contentItems").withIndex("by_project", q => q.eq("projectId", project._id)).collect();
+      for (const item of assignments) await ctx.db.delete(item._id);
       const videos = await ctx.db
         .query("videos")
         .withIndex("by_project", (q) => q.eq("projectId", project._id))
         .collect();
 
       for (const video of videos) {
+        await preserveOriginalRemoval(ctx, video, "workspace_deleted", user.subject);
         // Delete comments
         const comments = await ctx.db
           .query("comments")

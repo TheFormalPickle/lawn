@@ -1,4 +1,3 @@
-
 import { useConvex, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
@@ -20,7 +19,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Folder, Plus, MoreVertical, Trash2, Users, ArrowRight, CreditCard } from "lucide-react";
+import {
+  Folder,
+  Plus,
+  MoreVertical,
+  Trash2,
+  Users,
+  ArrowRight,
+  CreditCard,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,10 +85,7 @@ function TeamProjectCard({
         </div>
         {canCreateProject && (
           <DropdownMenu>
-            <DropdownMenuTrigger
-              asChild
-              onClick={(e) => e.stopPropagation()}
-            >
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="ghost"
                 size="icon"
@@ -107,7 +111,7 @@ function TeamProjectCard({
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between text-sm text-[#888] group-hover:text-[#1a1a1a] transition-colors">
-          <span>Open project</span>
+          <span>Open client</span>
           <ArrowRight className="h-4 w-4" />
         </div>
       </CardContent>
@@ -129,6 +133,8 @@ export default function TeamPage() {
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const shouldCanonicalize =
     !!context && !context.isCanonical && pathname !== context.canonicalPath;
@@ -156,8 +162,9 @@ export default function TeamPage() {
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProjectName.trim() || !team) return;
+    if (!newProjectName.trim() || !team || isLoading) return;
 
+    setCreateError(null);
     setIsLoading(true);
     try {
       const projectId = await createProject({
@@ -169,23 +176,36 @@ export default function TeamPage() {
       navigate({ to: projectPath(team.slug, projectId) });
     } catch (error) {
       console.error("Failed to create project:", error);
+      setCreateError(
+        "Client creation could not be confirmed. Your name is kept. Check the client list before trying again to avoid a duplicate.",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteProject = async (projectId: Id<"projects">) => {
-    if (!confirm("Are you sure you want to delete this project?")) return;
+    if (
+      !confirm(
+        "Delete this client and its assignments, videos and raw assets? This cannot be undone.",
+      )
+    )
+      return;
+    setDeleteError(null);
     try {
       await deleteProject({ projectId });
     } catch (error) {
       console.error("Failed to delete project:", error);
+      setDeleteError(
+        "Client deletion could not be confirmed. Refresh the client list before trying again.",
+      );
     }
   };
 
   const canManageMembers = team?.role === "owner" || team?.role === "admin";
-  const hasActiveSubscription = billing?.hasActiveSubscription ?? false;
-  const canCreateProject = team?.role !== "viewer" && hasActiveSubscription;
+  const canUseWorkspace = billing?.canUseWorkspace ?? false;
+  const internalDeployment = billing?.billingMode === "internal";
+  const canCreateProject = team?.role !== "viewer" && canUseWorkspace;
   const canAccessBilling = team?.role === "owner";
   const billingPath = team ? teamSettingsPath(team.slug) : null;
 
@@ -193,18 +213,31 @@ export default function TeamPage() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <DashboardHeader paths={[{ label: team?.slug ?? "team" }]}>
+        {team && (
+          <Button
+            variant="outline"
+            onClick={() => navigate({ to: `/dashboard/${team.slug}/tracker` })}
+          >
+            Content tracker
+          </Button>
+        )}
         {canAccessBilling && team && (
           <Button
             variant="outline"
-            onClick={() => navigate({ to: billingPath ?? teamSettingsPath(team.slug) })}
+            onClick={() =>
+              navigate({ to: billingPath ?? teamSettingsPath(team.slug) })
+            }
           >
             <CreditCard className="sm:mr-1.5 h-4 w-4" />
-            <span className="hidden sm:inline">Billing</span>
+            <span className="hidden sm:inline">
+              {internalDeployment ? "Settings" : "Billing"}
+            </span>
           </Button>
         )}
         {canManageMembers && (
           <Button
             variant="outline"
+            aria-label="Members"
             onClick={() => setMemberDialogOpen(true)}
           >
             <Users className="sm:mr-1.5 h-4 w-4" />
@@ -212,22 +245,30 @@ export default function TeamPage() {
           </Button>
         )}
         {canCreateProject && (
-          <Button onClick={() => setCreateDialogOpen(true)}>
+          <Button
+            aria-label="New client"
+            onClick={() => setCreateDialogOpen(true)}
+          >
             <Plus className="sm:mr-1.5 h-4 w-4" />
-            <span className="hidden sm:inline">New project</span>
+            <span className="hidden sm:inline">New client</span>
           </Button>
         )}
       </DashboardHeader>
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
-        {!isLoadingData && !hasActiveSubscription && canAccessBilling && (
+        {deleteError && (
+          <p role="alert" className="mb-4 text-sm text-danger">
+            {deleteError}
+          </p>
+        )}
+        {!isLoadingData && !canUseWorkspace && canAccessBilling && (
           <Card className="mb-6 border-[#1a1a1a]">
             <CardHeader>
-              <CardTitle>Set up billing to create projects</CardTitle>
+              <CardTitle>Set up billing to create clients</CardTitle>
               <CardDescription>
-                This team has no active subscription. Go to Billing to start Basic or Pro before
-                creating projects.
+                This team has no active subscription. Go to Billing to start
+                Basic or Pro before creating clients.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -250,11 +291,11 @@ export default function TeamPage() {
                 <div className="mx-auto w-12 h-12 bg-[#e8e8e0] flex items-center justify-center mb-2">
                   <Folder className="h-6 w-6 text-[#888]" />
                 </div>
-                <CardTitle className="text-lg">No projects yet</CardTitle>
+                <CardTitle className="text-lg">No clients yet</CardTitle>
                 <CardDescription>
-                  {hasActiveSubscription
-                    ? "Create your first project to start uploading videos."
-                    : "Activate billing first, then create your first project."}
+                  {canUseWorkspace
+                    ? "Add your first client, then assign its content workload in the tracker."
+                    : "Activate billing first, then add your first client."}
                 </CardDescription>
               </CardHeader>
               {canCreateProject && (
@@ -264,7 +305,7 @@ export default function TeamPage() {
                     onClick={() => setCreateDialogOpen(true)}
                   >
                     <Plus className="mr-1.5 h-4 w-4" />
-                    Create project
+                    Add client
                   </Button>
                 </CardContent>
               )}
@@ -285,10 +326,12 @@ export default function TeamPage() {
             </Card>
           </div>
         ) : (
-          <div className={cn(
-            "grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 transition-opacity duration-300",
-            isLoadingData ? "opacity-0" : "opacity-100"
-          )}>
+          <div
+            className={cn(
+              "grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 transition-opacity duration-300",
+              isLoadingData ? "opacity-0" : "opacity-100",
+            )}
+          >
             {projects?.map((project) => (
               <TeamProjectCard
                 key={project._id}
@@ -305,27 +348,41 @@ export default function TeamPage() {
         )}
       </div>
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+      <Dialog
+        open={createDialogOpen}
+        onOpenChange={(nextOpen) => {
+          if (!isLoading) setCreateDialogOpen(nextOpen);
+        }}
+      >
         <DialogContent>
           <form onSubmit={handleCreateProject}>
             <DialogHeader>
-              <DialogTitle>Create project</DialogTitle>
+              <DialogTitle>Add client</DialogTitle>
               <DialogDescription>
-                Projects help you organize related videos together.
+                A client keeps its assignments, review versions and shared
+                source files together.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
               <Input
-                placeholder="Project name"
+                placeholder="Client name"
+                aria-label="Client name"
+                disabled={isLoading}
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
                 autoFocus
               />
             </div>
+            {createError && (
+              <p role="alert" className="mb-4 text-sm text-danger">
+                {createError}
+              </p>
+            )}
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
+                disabled={isLoading}
                 onClick={() => setCreateDialogOpen(false)}
               >
                 Cancel
@@ -334,7 +391,7 @@ export default function TeamPage() {
                 type="submit"
                 disabled={!newProjectName.trim() || isLoading}
               >
-                {isLoading ? "Creating..." : "Create"}
+                {isLoading ? "Adding..." : "Add client"}
               </Button>
             </DialogFooter>
           </form>

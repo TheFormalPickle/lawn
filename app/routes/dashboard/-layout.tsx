@@ -1,23 +1,13 @@
-
-import { useAuth } from "@clerk/tanstack-react-start";
-import { useConvex, useQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useAuth } from "@/lib/auth";
+import { useConvexAuth, useQuery } from "convex/react";
+import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
-import {
-  Outlet,
-  Link,
-  useLocation,
-  useParams,
-} from "@tanstack/react-router";
+import { Outlet, useLocation, useParams } from "@tanstack/react-router";
+import { isVideoFile, useGlobalFileDrop } from "@/lib/useGlobalFileDrop";
 import { cn } from "@/lib/utils";
-import {
-  dashboardHomePath,
-  teamHomePath,
-  teamSettingsPath,
-} from "@/lib/routes";
-import { useRoutePrewarmIntent } from "@/lib/useRoutePrewarmIntent";
 import {
   Dialog,
   DialogContent,
@@ -26,33 +16,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { UploadProgress } from "@/components/upload/UploadProgress";
-import { prewarmDashboardIndex } from "./-index.data";
-import { prewarmSettings } from "./-settings.data";
-import { prewarmTeam } from "./-team.data";
 import { useVideoUploadManager } from "./-useVideoUploadManager";
 import { DashboardUploadProvider } from "@/lib/dashboardUploadContext";
 
-const VIDEO_FILE_EXTENSIONS = /\.(mp4|mov|m4v|webm|avi|mkv)$/i;
-
-function isVideoFile(file: File) {
-  return file.type.startsWith("video/") || VIDEO_FILE_EXTENSIONS.test(file.name);
-}
-
-function getVideoFiles(files: FileList | null) {
-  if (!files) return [];
-  return Array.from(files).filter(isVideoFile);
-}
-
-function dragEventHasFiles(event: DragEvent) {
-  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
-}
-
 export default function DashboardLayout() {
   const { isLoaded, userId } = useAuth();
+  const {
+    isLoading: isBackendAuthLoading,
+    isAuthenticated: isBackendAuthenticated,
+  } = useConvexAuth();
   const location = useLocation();
   const { pathname, searchStr } = location;
   const params = useParams({ strict: false });
-  const convex = useConvex();
   const teamSlug =
     typeof params.teamSlug === "string" ? params.teamSlug : undefined;
   const routeProjectId =
@@ -65,21 +40,18 @@ export default function DashboardLayout() {
     api.videos.getPublicIdByVideoId,
     routeVideoId ? { videoId: routeVideoId } : "skip",
   );
-  const teamHome = teamSlug ? teamHomePath(teamSlug) : null;
-  const settingsPath = teamSlug ? teamSettingsPath(teamSlug) : null;
   const uploadTargets = useQuery(
     api.projects.listUploadTargets,
-    teamSlug ? { teamSlug } : {},
+    isBackendAuthenticated ? (teamSlug ? { teamSlug } : {}) : "skip",
   );
   const {
     uploads,
     uploadFilesToProject,
     cancelUpload,
+    retryUploadConfirmation,
   } = useVideoUploadManager();
-  const [isGlobalDragActive, setIsGlobalDragActive] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
-  const dragDepthRef = useRef(0);
   const uploadableProjectIds = useMemo(
     () => new Set((uploadTargets ?? []).map((target) => target.projectId)),
     [uploadTargets],
@@ -89,12 +61,16 @@ export default function DashboardLayout() {
     : false;
 
   const requestUpload = useCallback(
-    (inputFiles: File[], preferredProjectId?: Id<"projects">) => {
+    (
+      inputFiles: File[],
+      preferredProjectId?: Id<"projects">,
+      contentItemId?: Id<"contentItems">,
+    ) => {
       const files = inputFiles.filter(isVideoFile);
       if (files.length === 0) return;
 
       if (preferredProjectId) {
-        void uploadFilesToProject(preferredProjectId, files);
+        void uploadFilesToProject(preferredProjectId, files, contentItemId);
         return;
       }
 
@@ -141,52 +117,7 @@ export default function DashboardLayout() {
     }
   }, []);
 
-  useEffect(() => {
-    const handleDragEnter = (event: DragEvent) => {
-      if (!dragEventHasFiles(event)) return;
-      event.preventDefault();
-      dragDepthRef.current += 1;
-      setIsGlobalDragActive(true);
-    };
-
-    const handleDragOver = (event: DragEvent) => {
-      if (!dragEventHasFiles(event)) return;
-      event.preventDefault();
-      setIsGlobalDragActive(true);
-    };
-
-    const handleDragLeave = (event: DragEvent) => {
-      if (!dragEventHasFiles(event)) return;
-      event.preventDefault();
-      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-      if (dragDepthRef.current === 0) {
-        setIsGlobalDragActive(false);
-      }
-    };
-
-    const handleDrop = (event: DragEvent) => {
-      if (!dragEventHasFiles(event)) return;
-      event.preventDefault();
-      dragDepthRef.current = 0;
-      setIsGlobalDragActive(false);
-
-      const files = getVideoFiles(event.dataTransfer?.files ?? null);
-      if (files.length === 0) return;
-      requestUpload(files);
-    };
-
-    window.addEventListener("dragenter", handleDragEnter);
-    window.addEventListener("dragover", handleDragOver);
-    window.addEventListener("dragleave", handleDragLeave);
-    window.addEventListener("drop", handleDrop);
-
-    return () => {
-      window.removeEventListener("dragenter", handleDragEnter);
-      window.removeEventListener("dragover", handleDragOver);
-      window.removeEventListener("dragleave", handleDragLeave);
-      window.removeEventListener("drop", handleDrop);
-    };
-  }, [requestUpload]);
+  const isGlobalDragActive = useGlobalFileDrop(requestUpload);
 
   const uploadContext = useMemo(
     () => ({
@@ -197,7 +128,8 @@ export default function DashboardLayout() {
     [requestUpload, uploads, cancelUpload],
   );
   const isResolvingPublicPlaybackExemption =
-    Boolean(isLoaded && !userId && routeVideoId) && publicPlaybackId === undefined;
+    Boolean(isLoaded && !userId && routeVideoId) &&
+    publicPlaybackId === undefined;
 
   useEffect(() => {
     if (!isLoaded || userId) return;
@@ -212,12 +144,14 @@ export default function DashboardLayout() {
     }
 
     const redirectUrl = `${pathname}${searchStr}`;
-    window.location.replace(`/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`);
+    window.location.replace(
+      `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`,
+    );
   }, [isLoaded, userId, pathname, searchStr, routeVideoId, publicPlaybackId]);
 
   if (!isLoaded) {
     return (
-      <div className="h-full flex items-center justify-center bg-[#f0f0e8]">
+      <div className="h-full flex items-center justify-center bg-background">
         <div className="text-[#888]">Loading...</div>
       </div>
     );
@@ -225,7 +159,7 @@ export default function DashboardLayout() {
 
   if (!userId) {
     return (
-      <div className="h-full flex items-center justify-center bg-[#f0f0e8]">
+      <div className="h-full flex items-center justify-center bg-background">
         <div className="text-[#888]">
           {isResolvingPublicPlaybackExemption
             ? "Checking public playback access..."
@@ -235,8 +169,25 @@ export default function DashboardLayout() {
     );
   }
 
+  // Provider sign-in is not proof that the workspace accepted its token.
+  // Keep failed authentication out of empty onboarding and workspace creation.
+  if (!isBackendAuthenticated) {
+    return (
+      <div className="h-full min-h-screen flex flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+        <p role="status">
+          {isBackendAuthLoading
+            ? "Connecting to your workspace…"
+            : "Your account could not connect to the workspace. Reconnect to try again."}
+        </p>
+        {!isBackendAuthLoading && (
+          <Button onClick={() => window.location.reload()}>Reconnect</Button>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className={cn("relative h-full flex flex-col bg-[#f0f0e8]")}>
+    <div className={cn("relative h-full flex flex-col bg-background")}>
       {/* Main content */}
       <main className="flex-1 overflow-auto flex flex-col">
         <DashboardUploadProvider value={uploadContext}>
@@ -246,10 +197,10 @@ export default function DashboardLayout() {
 
       {isGlobalDragActive && (
         <div className="pointer-events-none fixed inset-0 z-40">
-          <div className="absolute inset-0 bg-[#1a1a1a]/20" />
-          <div className="absolute inset-4 border-4 border-dashed border-[#2d5a2d] bg-[#2d5a2d]/10 flex items-center justify-center">
-            <p className="border-2 border-[#1a1a1a] bg-[#f0f0e8] px-4 py-2 text-sm font-bold text-[#1a1a1a]">
-              Drop videos to upload
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="absolute inset-4 rounded-2xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent)]/10 flex items-center justify-center">
+            <p className="rounded-xl border border-line bg-surface px-4 py-2 text-sm font-medium text-foreground">
+              Drop onto an assignment or the raw library
             </p>
           </div>
         </div>
@@ -268,36 +219,44 @@ export default function DashboardLayout() {
               bytesPerSecond={upload.bytesPerSecond}
               estimatedSecondsRemaining={upload.estimatedSecondsRemaining}
               onCancel={() => cancelUpload(upload.id)}
+              onRetryConfirmation={() => retryUploadConfirmation(upload.id)}
             />
           ))}
         </div>
       )}
 
-      <Dialog open={projectPickerOpen} onOpenChange={handleProjectPickerOpenChange}>
+      <Dialog
+        open={projectPickerOpen}
+        onOpenChange={handleProjectPickerOpenChange}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Choose a project</DialogTitle>
+            <DialogTitle>Choose a client</DialogTitle>
             <DialogDescription>
-              {pendingFiles?.length ? `Upload ${pendingFiles.length} video${pendingFiles.length > 1 ? "s" : ""} to:` : "Pick a project to start uploading."}
+              {pendingFiles?.length
+                ? `Upload ${pendingFiles.length} video${pendingFiles.length > 1 ? "s" : ""} to:`
+                : "Pick a client to start uploading."}
             </DialogDescription>
           </DialogHeader>
           {uploadTargets === undefined ? (
-            <p className="text-sm text-[#888]">Loading projects...</p>
+            <p className="text-sm text-muted">Loading clients…</p>
           ) : uploadTargets.length === 0 ? (
-            <p className="text-sm text-[#888]">
-              No uploadable projects found for your account.
+            <p className="text-sm text-muted">
+              No uploadable clients found for your account.
             </p>
           ) : (
-            <div className="max-h-80 overflow-y-auto border-2 border-[#1a1a1a] divide-y-2 divide-[#1a1a1a]">
+            <div className="max-h-80 overflow-y-auto rounded-xl border border-line divide-y divide-line">
               {uploadTargets.map((target) => (
                 <button
                   key={target.projectId}
                   type="button"
-                  className="w-full px-4 py-3 text-left hover:bg-[#e8e8e0] transition-colors"
+                  className="w-full px-4 py-3 text-left hover:bg-[var(--surface-alt)] transition-colors"
                   onClick={() => handleProjectSelected(target.projectId)}
                 >
-                  <p className="font-bold text-[#1a1a1a]">{target.projectName}</p>
-                  <p className="text-xs text-[#888]">{target.teamName}</p>
+                  <p className="font-medium text-foreground">
+                    {target.projectName}
+                  </p>
+                  <p className="text-xs text-muted">{target.teamName}</p>
                 </button>
               ))}
             </div>

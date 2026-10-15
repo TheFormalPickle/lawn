@@ -21,16 +21,21 @@ interface CreateTeamDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateTeamDialog({ open, onOpenChange }: CreateTeamDialogProps) {
+export function CreateTeamDialog({
+  open,
+  onOpenChange,
+}: CreateTeamDialogProps) {
   const [name, setName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const createTeam = useMutation(api.teams.create);
   const navigate = useNavigate({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || isLoading) return;
 
+    setError(null);
     setIsLoading(true);
     try {
       const createdTeam = await createTeam({ name: name.trim() });
@@ -39,39 +44,56 @@ export function CreateTeamDialog({ open, onOpenChange }: CreateTeamDialogProps) 
       navigate({ to: teamHomePath(createdTeam.slug) });
     } catch (error) {
       console.error("Failed to create team:", error);
+      setError(
+        "Workspace creation could not be confirmed. Your name is kept. Close this dialog and check your workspaces before trying again to avoid a duplicate.",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isLoading) onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create a new team</DialogTitle>
+            <DialogTitle>Create agency workspace</DialogTitle>
             <DialogDescription>
-              Teams let you collaborate on video projects with others.
+              Keep all clients, content teams, reviews and shared files in one
+              agency workspace.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Input
-              placeholder="Team name"
+              placeholder="Workspace name"
+              aria-label="Workspace name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={isLoading}
               autoFocus
             />
           </div>
+          {error && (
+            <p role="alert" className="mb-4 text-sm text-danger">
+              {error}
+            </p>
+          )}
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
+              disabled={isLoading}
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
             <Button type="submit" disabled={!name.trim() || isLoading}>
-              {isLoading ? "Creating..." : "Create team"}
+              {isLoading ? "Creating..." : "Create workspace"}
             </Button>
           </DialogFooter>
         </form>

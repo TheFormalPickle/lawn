@@ -6,7 +6,7 @@ export const Route = createFileRoute("/share/$token")({
   head: () =>
     seoHead({
       title: "Shared video",
-      description: "Review this shared video on lawn.",
+      description: "Review this shared video on Atrium.",
       path: "/share",
       noIndex: true,
     }),

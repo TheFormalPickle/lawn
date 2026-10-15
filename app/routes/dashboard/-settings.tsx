@@ -75,9 +75,8 @@ export default function TeamSettingsPage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
-  const [isCheckingOutPlan, setIsCheckingOutPlan] = useState<BillingPlan | null>(
-    null,
-  );
+  const [isCheckingOutPlan, setIsCheckingOutPlan] =
+    useState<BillingPlan | null>(null);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
   const prewarmTeamIntentHandlers = useRoutePrewarmIntent(() => {
@@ -85,10 +84,14 @@ export default function TeamSettingsPage() {
     return prewarmTeam(convex, { teamSlug: team.slug });
   });
 
-  const canonicalSettingsPath = context ? `${context.canonicalPath}/settings` : null;
+  const canonicalSettingsPath = context
+    ? `${context.canonicalPath}/settings`
+    : null;
   const isSettingsPath = pathname.endsWith("/settings");
   const shouldCanonicalize =
-    isSettingsPath && !!canonicalSettingsPath && pathname !== canonicalSettingsPath;
+    isSettingsPath &&
+    !!canonicalSettingsPath &&
+    pathname !== canonicalSettingsPath;
 
   useEffect(() => {
     if (shouldCanonicalize && canonicalSettingsPath) {
@@ -117,16 +120,24 @@ export default function TeamSettingsPage() {
   const plan = billing?.plan ?? normalizeTeamPlan(team.plan);
   const planConfig = BILLING_PLANS[plan];
   const hasActiveSubscription = billing?.hasActiveSubscription ?? false;
+  const internalDeployment = billing?.billingMode === "internal";
   const subscriptionStatus = billing?.subscriptionStatus ?? "not_subscribed";
   const isTrialing = subscriptionStatus === "trialing";
-  const hasPortalAccess = isOwner && Boolean(billing?.stripeCustomerId);
-  const currentPlanLabel = hasActiveSubscription ? planConfig.label : "Unpaid";
+  const hasPortalAccess =
+    !internalDeployment && isOwner && Boolean(billing?.stripeCustomerId);
+  const currentPlanLabel = internalDeployment
+    ? "Agency"
+    : hasActiveSubscription
+      ? planConfig.label
+      : "Unpaid";
   const canDeleteTeam = isOwner && !hasActiveSubscription;
 
   const storageUsed = billing?.storageUsedBytes ?? 0;
-  const storageLimit = planConfig.storageLimitBytes;
+  const storageLimit = billing?.storageLimitBytes;
   const storagePct =
-    storageLimit > 0 ? Math.min((storageUsed / storageLimit) * 100, 100) : 0;
+    typeof storageLimit === "number" && storageLimit > 0
+      ? Math.min((storageUsed / storageLimit) * 100, 100)
+      : 0;
 
   const handleSaveName = async () => {
     if (!editedName.trim()) return;
@@ -170,7 +181,8 @@ export default function TeamSettingsPage() {
     setIsCheckingOutPlan(targetPlan);
 
     try {
-      const settingsPath = canonicalSettingsPath ?? `/dashboard/${team.slug}/settings`;
+      const settingsPath =
+        canonicalSettingsPath ?? `/dashboard/${team.slug}/settings`;
       const successUrl = `${window.location.origin}${settingsPath}?billing=success`;
       const cancelUrl = `${window.location.origin}${settingsPath}?billing=cancel`;
       const session = await createSubscriptionCheckout({
@@ -200,7 +212,8 @@ export default function TeamSettingsPage() {
     setIsOpeningPortal(true);
 
     try {
-      const settingsPath = canonicalSettingsPath ?? `/dashboard/${team.slug}/settings`;
+      const settingsPath =
+        canonicalSettingsPath ?? `/dashboard/${team.slug}/settings`;
       const returnUrl = `${window.location.origin}${settingsPath}`;
       const session = await createCustomerPortalSession({
         teamId: team._id,
@@ -294,7 +307,9 @@ export default function TeamSettingsPage() {
                 <span className="text-xl font-black text-[#1a1a1a]">
                   {currentPlanLabel}
                 </span>
-                {hasActiveSubscription ? (
+                {internalDeployment ? (
+                  <Badge variant="success">Internal</Badge>
+                ) : hasActiveSubscription ? (
                   <Badge variant={isTrialing ? "warning" : "success"}>
                     {isTrialing ? "Trialing" : "Active"}
                   </Badge>
@@ -302,11 +317,14 @@ export default function TeamSettingsPage() {
                   <Badge variant="warning">{subscriptionStatus}</Badge>
                 )}
               </div>
-              {isTrialing && typeof billing?.currentPeriodEnd === "number" && (
-                <p className="text-xs text-[#888] mt-2">
-                  Trial ends {formatUtcDateFromUnixSeconds(billing.currentPeriodEnd)} UTC
-                </p>
-              )}
+              {!internalDeployment &&
+                isTrialing &&
+                typeof billing?.currentPeriodEnd === "number" && (
+                  <p className="text-xs text-[#888] mt-2">
+                    Trial ends{" "}
+                    {formatUtcDateFromUnixSeconds(billing.currentPeriodEnd)} UTC
+                  </p>
+                )}
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-[0.2em] text-[#888] mb-1">
@@ -316,15 +334,26 @@ export default function TeamSettingsPage() {
                 {billing ? formatBytes(storageUsed) : "—"}
                 <span className="text-sm font-bold text-[#888]">
                   {" "}
-                  / {formatBytes(storageLimit)}
+                  {typeof storageLimit === "number"
+                    ? `/ ${formatBytes(storageLimit)}`
+                    : storageLimit === null
+                      ? "· No application cap"
+                      : ""}
                 </span>
               </p>
-              <div className="h-1.5 bg-[#ddd] mt-2">
-                <div
-                  className="h-full bg-[#2d5a2d] transition-all duration-500"
-                  style={{ width: `${storagePct}%` }}
-                />
-              </div>
+              {typeof storageLimit === "number" && (
+                <div className="h-1.5 bg-[#ddd] mt-2">
+                  <div
+                    className="h-full bg-[#2d5a2d] transition-all duration-500"
+                    style={{ width: `${storagePct}%` }}
+                  />
+                </div>
+              )}
+              {storageLimit === null && (
+                <p className="mt-2 text-xs text-muted">
+                  Recorded uploads; available NAS space is managed separately.
+                </p>
+              )}
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-[0.2em] text-[#888] mb-1">
@@ -340,93 +369,119 @@ export default function TeamSettingsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12">
             {/* Plans column */}
             <div className="lg:col-span-3">
-              <h2 className="text-[10px] uppercase tracking-[0.2em] font-bold text-[#888] mb-4">
-                Plans
-              </h2>
+              {internalDeployment ? (
+                <div className="border-2 border-[#1a1a1a] p-5">
+                  <h2 className="font-bold">Agency workspace</h2>
+                  <p className="mt-3 text-sm text-[#888]">
+                    {storageLimit === null
+                      ? "There is no application storage cap on this installation. Uploads use the connected storage; physical capacity and availability still apply."
+                      : "Your team can upload within its configured application storage cap."}{" "}
+                    Subscription checkout is disabled on this installation.
+                  </p>
+                  <p className="mt-3 text-sm">
+                    Team roles and review permissions still apply. Recorded
+                    upload usage is not a measurement of the NAS's total used or
+                    free space.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-[10px] uppercase tracking-[0.2em] font-bold text-[#888] mb-4">
+                    Plans
+                  </h2>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {(Object.keys(BILLING_PLANS) as BillingPlan[]).map((planId) => {
-                  const config = BILLING_PLANS[planId];
-                  const isCurrentPlan = planId === plan && hasActiveSubscription;
-                  return (
-                    <div
-                      key={planId}
-                      className={`border-2 p-5 transition-colors ${
-                        isCurrentPlan
-                          ? "border-[#2d5a2d] bg-[#2d5a2d] text-[#f0f0e8]"
-                          : "border-[#1a1a1a] bg-[#f0f0e8]"
-                      }`}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {(Object.keys(BILLING_PLANS) as BillingPlan[]).map(
+                      (planId) => {
+                        const config = BILLING_PLANS[planId];
+                        const isCurrentPlan =
+                          planId === plan && hasActiveSubscription;
+                        return (
+                          <div
+                            key={planId}
+                            className={`border-2 p-5 transition-colors ${
+                              isCurrentPlan
+                                ? "border-[#2d5a2d] bg-[#2d5a2d] text-[#f0f0e8]"
+                                : "border-[#1a1a1a] bg-[#f0f0e8]"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <p
+                                className={`text-sm font-bold uppercase tracking-wider ${isCurrentPlan ? "text-[#f0f0e8]" : "text-[#888]"}`}
+                              >
+                                {config.label}
+                              </p>
+                              {isCurrentPlan && (
+                                <Check className="h-4 w-4 text-[#7cb87c]" />
+                              )}
+                            </div>
+                            <p
+                              className={`text-3xl font-black ${isCurrentPlan ? "text-[#f0f0e8]" : "text-[#1a1a1a]"}`}
+                            >
+                              ${config.monthlyPriceUsd}
+                              <span
+                                className={`text-sm font-bold ${isCurrentPlan ? "text-[#7cb87c]" : "text-[#888]"}`}
+                              >
+                                /mo
+                              </span>
+                            </p>
+                            <div
+                              className={`text-sm mt-3 space-y-0.5 ${isCurrentPlan ? "text-[#c8e0c8]" : "text-[#888]"}`}
+                            >
+                              <p>{config.seats} seats</p>
+                              <p>
+                                {formatBytes(config.storageLimitBytes)} storage
+                              </p>
+                            </div>
+                            {isOwner && !hasActiveSubscription && (
+                              <Button
+                                variant={
+                                  planId === "pro" ? "primary" : "default"
+                                }
+                                className="w-full mt-4"
+                                disabled={isCheckingOutPlan !== null}
+                                onClick={() => void handleStartCheckout(planId)}
+                              >
+                                <CreditCard className="mr-2 h-4 w-4" />
+                                {isCheckingOutPlan === planId
+                                  ? "Redirecting..."
+                                  : `Start ${config.label} Trial`}
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+
+                  {hasPortalAccess && (
+                    <Button
+                      variant="outline"
+                      className="w-full mt-4"
+                      disabled={isOpeningPortal}
+                      onClick={() => void handleOpenPortal()}
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <p
-                          className={`text-sm font-bold uppercase tracking-wider ${isCurrentPlan ? "text-[#f0f0e8]" : "text-[#888]"}`}
-                        >
-                          {config.label}
-                        </p>
-                        {isCurrentPlan && (
-                          <Check className="h-4 w-4 text-[#7cb87c]" />
-                        )}
-                      </div>
-                      <p
-                        className={`text-3xl font-black ${isCurrentPlan ? "text-[#f0f0e8]" : "text-[#1a1a1a]"}`}
-                      >
-                        ${config.monthlyPriceUsd}
-                        <span
-                          className={`text-sm font-bold ${isCurrentPlan ? "text-[#7cb87c]" : "text-[#888]"}`}
-                        >
-                          /mo
-                        </span>
-                      </p>
-                      <div
-                        className={`text-sm mt-3 space-y-0.5 ${isCurrentPlan ? "text-[#c8e0c8]" : "text-[#888]"}`}
-                      >
-                        <p>{config.seats} seats</p>
-                        <p>{formatBytes(config.storageLimitBytes)} storage</p>
-                      </div>
-                      {isOwner && !hasActiveSubscription && (
-                        <Button
-                          variant={planId === "pro" ? "primary" : "default"}
-                          className="w-full mt-4"
-                          disabled={isCheckingOutPlan !== null}
-                          onClick={() => void handleStartCheckout(planId)}
-                        >
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          {isCheckingOutPlan === planId
-                            ? "Redirecting..."
-                            : `Start ${config.label} Trial`}
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      {isOpeningPortal
+                        ? "Opening billing portal..."
+                        : "Manage subscription"}
+                    </Button>
+                  )}
 
-              {hasPortalAccess && (
-                <Button
-                  variant="outline"
-                  className="w-full mt-4"
-                  disabled={isOpeningPortal}
-                  onClick={() => void handleOpenPortal()}
-                >
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  {isOpeningPortal
-                    ? "Opening billing portal..."
-                    : "Manage subscription"}
-                </Button>
-              )}
+                  {billingError && (
+                    <p className="text-sm font-bold text-[#dc2626] mt-3">
+                      {billingError}
+                    </p>
+                  )}
 
-              {billingError && (
-                <p className="text-sm font-bold text-[#dc2626] mt-3">
-                  {billingError}
-                </p>
-              )}
-
-              {!hasActiveSubscription && (
-                <p className="text-sm text-[#888] mt-3">
-                  An active subscription is required to create projects and upload
-                  videos. Eligible teams receive a {TEAM_TRIAL_DAYS}-day trial before
-                  billing starts.
-                </p>
+                  {!hasActiveSubscription && (
+                    <p className="text-sm text-[#888] mt-3">
+                      An active subscription is required to create projects and
+                      upload videos. Eligible teams receive a {TEAM_TRIAL_DAYS}
+                      -day trial before billing starts.
+                    </p>
+                  )}
+                </>
               )}
             </div>
 
@@ -484,9 +539,7 @@ export default function TeamSettingsPage() {
           {isOwner && (
             <div className="border-t-2 border-[#dc2626]/30 mt-16 pt-6 flex items-center justify-between">
               <div>
-                <p className="text-sm font-bold text-[#1a1a1a]">
-                  Delete team
-                </p>
+                <p className="text-sm font-bold text-[#1a1a1a]">Delete team</p>
                 <p className="text-xs text-[#888] mt-0.5">
                   {canDeleteTeam
                     ? "Permanently remove this team, all projects, and videos."

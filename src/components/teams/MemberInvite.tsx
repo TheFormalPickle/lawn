@@ -34,16 +34,21 @@ type Role = "admin" | "member" | "viewer";
 
 const roleLabels: Record<Role, string> = {
   admin: "Admin",
-  member: "Member",
-  viewer: "Viewer",
+  member: "Content team",
+  viewer: "CMO",
 };
 
-export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) {
+export function MemberInvite({
+  teamId,
+  open,
+  onOpenChange,
+}: MemberInviteProps) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
   const [isLoading, setIsLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const members = useQuery(api.teams.getMembers, { teamId });
   const invites = useQuery(api.teams.getInvites, { teamId });
@@ -53,8 +58,10 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || isLoading) return;
 
+    setInviteError(null);
+    setInviteLink(null);
     setIsLoading(true);
     try {
       const token = await inviteMember({
@@ -62,11 +69,17 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
         email: email.trim(),
         role,
       });
-      const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+      const baseUrl =
+        typeof window !== "undefined" ? window.location.origin : "";
       setInviteLink(`${baseUrl}/invite/${token}`);
       setEmail("");
     } catch (error) {
       console.error("Failed to invite member:", error);
+      setInviteError(
+        error instanceof Error && error.message.includes("already a member")
+          ? "This email already belongs to a workspace member. Update their role below or use another email."
+          : "Invite link could not be confirmed. Your email and role are kept. Check pending invites before creating another link.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -100,12 +113,25 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isLoading) onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent className="max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Team members</DialogTitle>
           <DialogDescription>
-            Invite new members or manage existing ones.
+            Create an email-bound link and share it with your teammate. No
+            invitation email is sent.
+            {import.meta.env.VITE_AUTH_PROVIDER === "keycloak" && (
+              <>
+                {" "}
+                Your agency administrator must create their sign-in account
+                before you share this workspace link.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -113,14 +139,16 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
           <div className="flex gap-2">
             <Input
               placeholder="Email address"
+              aria-label="Invitee email address"
               type="email"
+              disabled={isLoading}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="flex-1"
+              className="min-w-0 flex-1"
             />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-28">
+                <Button variant="outline" className="w-36" disabled={isLoading}>
                   {roleLabels[role]}
                   <ChevronDown className="ml-2 h-4 w-4" />
                 </Button>
@@ -130,17 +158,30 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
                   Admin
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setRole("member")}>
-                  Member
+                  Content team
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setRole("viewer")}>
-                  Viewer
+                  CMO
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <Button type="submit" disabled={!email.trim() || isLoading} className="w-full">
+          {inviteError && (
+            <p role="alert" className="text-sm text-danger">
+              {inviteError}
+            </p>
+          )}
+          <p className="text-xs text-muted">
+            Content team members plan, edit and use raw assets. CMOs browse
+            approved deliverables. Admins also manage assignments and people.
+          </p>
+          <Button
+            type="submit"
+            disabled={!email.trim() || isLoading}
+            className="w-full"
+          >
             <UserPlus className="mr-2 h-4 w-4" />
-            {isLoading ? "Sending..." : "Send invite"}
+            {isLoading ? "Creating link..." : "Create invite link"}
           </Button>
         </form>
 
@@ -151,11 +192,7 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
             </p>
             <div className="flex gap-2">
               <Input value={inviteLink} readOnly className="text-sm" />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleCopyLink}
-              >
+              <Button variant="outline" size="icon" onClick={handleCopyLink}>
                 {copied ? (
                   <Check className="h-4 w-4" />
                 ) : (
@@ -182,7 +219,9 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-sm font-bold text-[#1a1a1a]">{member.userName}</p>
+                    <p className="text-sm font-bold text-[#1a1a1a]">
+                      {member.userName}
+                    </p>
                     <p className="text-xs text-[#888]">{member.userEmail}</p>
                   </div>
                 </div>
@@ -200,19 +239,25 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                           <DropdownMenuItem
-                            onClick={() => handleUpdateRole(member._id, "admin")}
+                            onClick={() =>
+                              handleUpdateRole(member._id, "admin")
+                            }
                           >
                             Admin
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleUpdateRole(member._id, "member")}
+                            onClick={() =>
+                              handleUpdateRole(member._id, "member")
+                            }
                           >
-                            Member
+                            Content team
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleUpdateRole(member._id, "viewer")}
+                            onClick={() =>
+                              handleUpdateRole(member._id, "viewer")
+                            }
                           >
-                            Viewer
+                            CMO
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -234,20 +279,26 @@ export function MemberInvite({ teamId, open, onOpenChange }: MemberInviteProps) 
 
         {invites && invites.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-bold text-[#1a1a1a]">Pending invites</h4>
+            <h4 className="text-sm font-bold text-[#1a1a1a]">
+              Pending invites
+            </h4>
             <div className="space-y-2">
               {invites.map((invite) => (
                 <div
                   key={invite._id}
                   className="flex items-center justify-between p-2 border-2 border-[#1a1a1a] bg-[#e8e8e0]"
                 >
-                  <div>
-                    <p className="text-sm text-[#1a1a1a]">{invite.email}</p>
+                  <div className="min-w-0">
+                    <p className="break-all text-sm text-[#1a1a1a]">
+                      {invite.email}
+                    </p>
                     <p className="text-xs text-[#888]">
                       Invited as {roleLabels[invite.role]}
                     </p>
                   </div>
-                  <Badge variant="outline">Pending</Badge>
+                  <Badge variant="outline" className="shrink-0">
+                    Pending
+                  </Badge>
                 </div>
               ))}
             </div>

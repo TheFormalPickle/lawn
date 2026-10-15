@@ -1,0 +1,43 @@
+# Run from a clean release directory. Do not expose the local synthetic preview.
+name: atrium-beta
+services:
+  web:
+    image: atrium-beta-web:${ATRIUM_BETA_REVISION:?Set the exact reviewed revision}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.beta
+      args:
+        VITE_CONVEX_URL: ${VITE_CONVEX_URL:?Set the actual beta backend URL}
+        VITE_CONVEX_SITE_URL: ${VITE_CONVEX_SITE_URL:-}
+        VITE_AUTH_PROVIDER: ${VITE_AUTH_PROVIDER:-clerk}
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+        VITE_OIDC_URL: ${VITE_OIDC_URL:-}
+        VITE_OIDC_REALM: ${VITE_OIDC_REALM:-}
+        VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID:-}
+    ports:
+      - "127.0.0.1:5298:5298"
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 2
+    healthcheck:
+      # Transport/static health only. Real sign-in and media need separate checks.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5298/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

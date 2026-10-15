@@ -4,7 +4,7 @@ import {
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
-import { ClerkProvider } from "@clerk/tanstack-react-start";
+import { AuthProvider } from "@/lib/auth";
 import type { ReactNode } from "react";
 
 import { ConvexClientProvider } from "@/lib/convex";
@@ -18,22 +18,28 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "lawn — video review for creative teams" },
+      { title: "Atrium — content workspace" },
       {
         name: "description",
         content:
-          "Video review and collaboration for creative teams. Frame-accurate comments, unlimited seats, $5/month flat. The open source Frame.io alternative.",
+          "Client assignments, creative review and a shared content library for the agency.",
       },
-      { property: "og:site_name", content: "lawn" },
-      { name: "twitter:site", content: "@theo" },
+      { property: "og:site_name", content: "Atrium" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/svg+xml", href: "/grass-logo.svg?v=4" },
-      { rel: "icon", type: "image/x-icon", href: "/favicon.ico?v=4" },
-      { rel: "shortcut icon", href: "/favicon.ico?v=4" },
-      { rel: "preconnect", href: "https://stream.mux.com", crossOrigin: "anonymous" },
-      { rel: "preconnect", href: "https://image.mux.com", crossOrigin: "anonymous" },
+      { rel: "icon", type: "image/png", href: "/atrium-logo.png" },
+      { rel: "shortcut icon", href: "/atrium-logo.png" },
+      {
+        rel: "preconnect",
+        href: "https://stream.mux.com",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "preconnect",
+        href: "https://image.mux.com",
+        crossOrigin: "anonymous",
+      },
       { rel: "dns-prefetch", href: "//stream.mux.com" },
       { rel: "dns-prefetch", href: "//image.mux.com" },
     ],
@@ -43,7 +49,11 @@ export const Route = createRootRoute({
     return (
       <main className="pt-16 p-4 container mx-auto">
         <h1>Error</h1>
-        <p>{error instanceof Error ? error.message : "An unexpected error occurred."}</p>
+        <p>
+          {error instanceof Error
+            ? error.message
+            : "An unexpected error occurred."}
+        </p>
         {import.meta.env.DEV && error instanceof Error && error.stack ? (
           <pre className="w-full p-4 overflow-x-auto">
             <code>{error.stack}</code>
@@ -64,16 +74,10 @@ function RootComponent() {
 }
 
 function AppShell({ children }: { children: ReactNode }) {
-  const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-
-  if (!publishableKey) {
-    throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
-  }
-
   return (
-    <ClerkProvider publishableKey={publishableKey}>
+    <AuthProvider>
       <RootDocument>{children}</RootDocument>
-    </ClerkProvider>
+    </AuthProvider>
   );
 }
 
@@ -86,10 +90,7 @@ function RootDocument({ children }: { children: ReactNode }) {
           document.documentElement.setAttribute("data-theme", stored);
           return;
         }
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        if (prefersDark) {
-          document.documentElement.setAttribute("data-theme", "dark");
-        }
+        document.documentElement.setAttribute("data-theme", "dark");
       } catch {}
     })();
   `;

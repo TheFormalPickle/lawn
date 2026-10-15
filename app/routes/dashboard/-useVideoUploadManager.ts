@@ -1,5 +1,5 @@
 import { useAction, useMutation } from "convex/react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import type { UploadStatus } from "@/components/upload/UploadProgress";
@@ -9,6 +9,7 @@ export interface ManagedUploadItem {
   projectId: Id<"projects">;
   file: File;
   videoId?: Id<"videos">;
+  uploadId?: string;
   progress: number;
   status: UploadStatus;
   error?: string;
@@ -18,7 +19,10 @@ export interface ManagedUploadItem {
 }
 
 function createUploadId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
   return Math.random().toString(36).slice(2);
@@ -30,9 +34,66 @@ export function useVideoUploadManager() {
   const markUploadComplete = useAction(api.videoActions.markUploadComplete);
   const markUploadFailed = useAction(api.videoActions.markUploadFailed);
   const [uploads, setUploads] = useState<ManagedUploadItem[]>([]);
+  const confirming = useRef(new Set<string>());
+  const confirmUpload = useCallback(
+    async (id: string, videoId: Id<"videos">, uploadId: string) => {
+      if (confirming.current.has(id)) return;
+      confirming.current.add(id);
+      setUploads((prev) =>
+        prev.map((upload) =>
+          upload.id === id
+            ? {
+                ...upload,
+                status: "processing",
+                progress: 100,
+                error: undefined,
+              }
+            : upload,
+        ),
+      );
+      try {
+        await markUploadComplete({ videoId, uploadId });
+        setUploads((prev) =>
+          prev.map((upload) =>
+            upload.id === id
+              ? { ...upload, status: "complete", progress: 100 }
+              : upload,
+          ),
+        );
+        setTimeout(
+          () => setUploads((prev) => prev.filter((upload) => upload.id !== id)),
+          3000,
+        );
+      } catch {
+        // A lost action reply is not proof that the transfer or ingest failed.
+        // Retain this exact original's receipt; checking it never uploads again.
+        setUploads((prev) =>
+          prev.map((upload) =>
+            upload.id === id
+              ? {
+                  ...upload,
+                  status: "unconfirmed",
+                  error:
+                    "The file was sent, but processing confirmation is unavailable. Check the edit or retry confirmation before uploading another copy.",
+                }
+              : upload,
+          ),
+        );
+      } finally {
+        confirming.current.delete(id);
+      }
+    },
+    [markUploadComplete],
+  );
 
   const uploadFilesToProject = useCallback(
-    async (projectId: Id<"projects">, files: File[]) => {
+    async (
+      projectId: Id<"projects">,
+      files: File[],
+      contentItemId?: Id<"contentItems">,
+    ) => {
+      if (contentItemId && files.length !== 1)
+        throw new Error("Upload one edit per assignment at a time.");
       for (const file of files) {
         const uploadId = createUploadId();
         const title = file.name.replace(/\.[^/.]+$/, "");
@@ -51,10 +112,12 @@ export function useVideoUploadManager() {
         ]);
 
         let createdVideoId: Id<"videos"> | undefined;
+        let currentUploadId: string | undefined;
 
         try {
           createdVideoId = await createVideo({
             projectId,
+            contentItemId,
             title,
             fileSize: file.size,
             contentType: file.type || "video/mp4",
@@ -68,12 +131,21 @@ export function useVideoUploadManager() {
             ),
           );
 
-          const { url } = await getUploadUrl({
+          const { url, uploadId: attemptId } = await getUploadUrl({
             videoId: createdVideoId,
             filename: file.name,
             fileSize: file.size,
             contentType: file.type || "video/mp4",
           });
+
+          currentUploadId = attemptId;
+          setUploads((prev) =>
+            prev.map((upload) =>
+              upload.id === uploadId
+                ? { ...upload, uploadId: attemptId }
+                : upload,
+            ),
+          );
 
           await new Promise<void>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -124,7 +196,9 @@ export function useVideoUploadManager() {
                 resolve();
                 return;
               }
-              reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+              reject(
+                new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`),
+              );
             });
 
             xhr.addEventListener("error", () => {
@@ -144,19 +218,7 @@ export function useVideoUploadManager() {
             xhr.send(file);
           });
 
-          await markUploadComplete({ videoId: createdVideoId });
-
-          setUploads((prev) =>
-            prev.map((upload) =>
-              upload.id === uploadId
-                ? { ...upload, status: "complete", progress: 100 }
-                : upload,
-            ),
-          );
-
-          setTimeout(() => {
-            setUploads((prev) => prev.filter((upload) => upload.id !== uploadId));
-          }, 3000);
+          await confirmUpload(uploadId, createdVideoId, currentUploadId);
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : "Upload failed";
@@ -170,30 +232,51 @@ export function useVideoUploadManager() {
           );
 
           if (createdVideoId) {
-            markUploadFailed({ videoId: createdVideoId }).catch(console.error);
+            markUploadFailed({
+              videoId: createdVideoId,
+              uploadId: currentUploadId,
+            }).catch(console.error);
           }
         }
       }
     },
-    [createVideo, getUploadUrl, markUploadComplete, markUploadFailed],
+    [createVideo, getUploadUrl, confirmUpload, markUploadFailed],
   );
 
   const cancelUpload = useCallback(
     (uploadId: string) => {
       const upload = uploads.find((item) => item.id === uploadId);
-      if (upload?.abortController) {
+      if (
+        !upload ||
+        (upload.status !== "pending" && upload.status !== "uploading")
+      )
+        return;
+      if (upload.abortController) {
         upload.abortController.abort();
       }
       if (upload?.videoId) {
-        markUploadFailed({ videoId: upload.videoId }).catch(console.error);
+        markUploadFailed({
+          videoId: upload.videoId,
+          uploadId: upload.uploadId,
+        }).catch(console.error);
       }
       setUploads((prev) => prev.filter((item) => item.id !== uploadId));
     },
     [uploads, markUploadFailed],
   );
 
+  const retryUploadConfirmation = useCallback(
+    (id: string) => {
+      const upload = uploads.find((item) => item.id === id);
+      if (upload?.status === "unconfirmed" && upload.videoId && upload.uploadId)
+        void confirmUpload(id, upload.videoId, upload.uploadId);
+    },
+    [uploads, confirmUpload],
+  );
+
   return {
     uploads,
+    retryUploadConfirmation,
     uploadFilesToProject,
     cancelUpload,
   };

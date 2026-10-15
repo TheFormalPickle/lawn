@@ -1,7 +1,7 @@
 import { useAction, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { Link, useParams } from "@tanstack/react-router";
-import { useUser } from "@clerk/tanstack-react-start";
+import { useUser } from "@/lib/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { VideoPlayer, type VideoPlayerHandle } from "@/components/video-player/VideoPlayer";
 import { Button } from "@/components/ui/button";
@@ -126,7 +126,7 @@ export default function WatchPage() {
           </CardHeader>
           <CardContent>
             <Link to="/" preload="intent" className="block">
-              <Button variant="outline" className="w-full">Go to lawn</Button>
+              <Button variant="outline" className="w-full">Go to Atrium</Button>
             </Link>
           </CardContent>
         </Card>
@@ -146,7 +146,7 @@ export default function WatchPage() {
             to="/"
             className="text-[#888] hover:text-[#1a1a1a] text-sm flex items-center gap-2 font-bold"
           >
-            lawn
+            Atrium
           </Link>
           <div className="h-4 w-[2px] bg-[#1a1a1a]/20" />
           <h1 className="text-base font-black truncate max-w-[150px] sm:max-w-[300px]">{video.title}</h1>

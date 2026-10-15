@@ -1,4 +1,3 @@
-
 import { useConvex, useMutation, useAction } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
@@ -6,7 +5,10 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { VideoPlayer, type VideoPlayerHandle } from "@/components/video-player/VideoPlayer";
+import {
+  VideoPlayer,
+  type VideoPlayerHandle,
+} from "@/components/video-player/VideoPlayer";
 import { CommentList } from "@/components/comments/CommentList";
 import { CommentInput } from "@/components/comments/CommentInput";
 import { ShareDialog } from "@/components/ShareDialog";
@@ -62,15 +64,21 @@ export default function VideoPage() {
     videoId,
   });
   const updateVideo = useMutation(api.videos.update);
-  const updateVideoWorkflowStatus = useMutation(api.videos.updateWorkflowStatus);
+  const updateVideoWorkflowStatus = useMutation(
+    api.videos.updateWorkflowStatus,
+  );
   const getPlaybackSession = useAction(api.videoActions.getPlaybackSession);
-  const getOriginalPlaybackUrl = useAction(api.videoActions.getOriginalPlaybackUrl);
+  const getOriginalPlaybackUrl = useAction(
+    api.videoActions.getOriginalPlaybackUrl,
+  );
   const getDownloadUrl = useAction(api.videoActions.getDownloadUrl);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
-  const [highlightedCommentId, setHighlightedCommentId] = useState<Id<"comments"> | undefined>();
+  const [highlightedCommentId, setHighlightedCommentId] = useState<
+    Id<"comments"> | undefined
+  >();
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [mobileCommentsOpen, setMobileCommentsOpen] = useState(false);
   const [playbackSession, setPlaybackSession] = useState<{
@@ -78,21 +86,32 @@ export default function VideoPage() {
     posterUrl: string;
   } | null>(null);
   const [isLoadingPlayback, setIsLoadingPlayback] = useState(false);
-  const [originalPlaybackUrl, setOriginalPlaybackUrl] = useState<string | null>(null);
-  const [isLoadingOriginalPlayback, setIsLoadingOriginalPlayback] = useState(false);
-  const [preferredSource, setPreferredSource] = useState<"mux720" | "original">("original");
+  const [originalPlaybackUrl, setOriginalPlaybackUrl] = useState<string | null>(
+    null,
+  );
+  const [isLoadingOriginalPlayback, setIsLoadingOriginalPlayback] =
+    useState(false);
+  const [originalError, setOriginalError] = useState<string | null>(null);
+  const [originalRetry, setOriginalRetry] = useState(0);
+  const [preferredSource, setPreferredSource] = useState<"mux720" | "original">(
+    "original",
+  );
   const playerRef = useRef<VideoPlayerHandle | null>(null);
   const isPlayable = video?.status === "ready" && Boolean(video?.muxPlaybackId);
   const playbackUrl = playbackSession?.url ?? null;
   const activePlaybackUrl =
     preferredSource === "mux720"
-      ? playbackUrl ?? originalPlaybackUrl
-      : originalPlaybackUrl ?? playbackUrl;
+      ? (playbackUrl ?? originalPlaybackUrl)
+      : (originalPlaybackUrl ?? playbackUrl);
   const activeQualityId =
     activePlaybackUrl && playbackUrl && activePlaybackUrl === playbackUrl
       ? "mux720"
       : "original";
-  const isUsingOriginalFallback = Boolean(activePlaybackUrl && activePlaybackUrl === originalPlaybackUrl && !playbackUrl);
+  const isUsingOriginalFallback = Boolean(
+    activePlaybackUrl &&
+    activePlaybackUrl === originalPlaybackUrl &&
+    !playbackUrl,
+  );
   const shouldCanonicalize =
     !!context && !context.isCanonical && pathname !== context.canonicalPath;
   const prewarmTeamIntentHandlers = useRoutePrewarmIntent(() =>
@@ -146,7 +165,12 @@ export default function VideoPage() {
   }, [getPlaybackSession, isPlayable, resolvedVideoId, video?.muxPlaybackId]);
 
   useEffect(() => {
-    if (!resolvedVideoId || !video || video.status === "uploading" || video.status === "failed") {
+    if (
+      !resolvedVideoId ||
+      !video ||
+      video.status === "uploading" ||
+      video.status === "failed"
+    ) {
       setOriginalPlaybackUrl(null);
       setIsLoadingOriginalPlayback(false);
       return;
@@ -154,6 +178,7 @@ export default function VideoPage() {
 
     let cancelled = false;
     setIsLoadingOriginalPlayback(true);
+    setOriginalError(null);
 
     void getOriginalPlaybackUrl({ videoId: resolvedVideoId })
       .then((result) => {
@@ -163,6 +188,9 @@ export default function VideoPage() {
       .catch(() => {
         if (cancelled) return;
         setOriginalPlaybackUrl(null);
+        setOriginalError(
+          "The original is unavailable or has changed. Restore storage or upload a new edit, then retry.",
+        );
       })
       .finally(() => {
         if (cancelled) return;
@@ -172,7 +200,14 @@ export default function VideoPage() {
     return () => {
       cancelled = true;
     };
-  }, [getOriginalPlaybackUrl, resolvedVideoId, video?.status, video?.s3Key]);
+  }, [
+    getOriginalPlaybackUrl,
+    resolvedVideoId,
+    video?.status,
+    video?.s3Key,
+    video?.s3ETag,
+    originalRetry,
+  ]);
 
   const handleTimeUpdate = useCallback((time: number) => {
     setCurrentTime(time);
@@ -199,13 +234,16 @@ export default function VideoPage() {
       playerRef.current?.seekTo(time);
       setHighlightedCommentId(undefined);
     },
-    [playerRef, setHighlightedCommentId]
+    [playerRef, setHighlightedCommentId],
   );
 
   const handleSaveTitle = async () => {
     if (!editedTitle.trim() || !video || !resolvedVideoId) return;
     try {
-      await updateVideo({ videoId: resolvedVideoId, title: editedTitle.trim() });
+      await updateVideo({
+        videoId: resolvedVideoId,
+        title: editedTitle.trim(),
+      });
       setIsEditingTitle(false);
     } catch (error) {
       console.error("Failed to update title:", error);
@@ -216,7 +254,10 @@ export default function VideoPage() {
     async (workflowStatus: VideoWorkflowStatus) => {
       if (!resolvedVideoId) return;
       try {
-        await updateVideoWorkflowStatus({ videoId: resolvedVideoId, workflowStatus });
+        await updateVideoWorkflowStatus({
+          videoId: resolvedVideoId,
+          workflowStatus,
+        });
       } catch (error) {
         console.error("Failed to update review status:", error);
       }
@@ -239,7 +280,12 @@ export default function VideoPage() {
     );
   }
 
-  if (context === null || video === null || !resolvedProjectId || !resolvedVideoId) {
+  if (
+    context === null ||
+    video === null ||
+    !resolvedProjectId ||
+    !resolvedVideoId
+  ) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-[#888]">Video not found</div>
@@ -253,75 +299,88 @@ export default function VideoPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <DashboardHeader paths={[
-        {
-          label: resolvedTeamSlug,
-          href: teamHomePath(resolvedTeamSlug),
-          prewarmIntentHandlers: prewarmTeamIntentHandlers,
-        },
-        {
-          label: context?.project?.name ?? "project",
-          href: projectPath(resolvedTeamSlug, resolvedProjectId),
-          prewarmIntentHandlers: prewarmProjectIntentHandlers,
-        },
-        { 
-          label: isEditingTitle ? (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editedTitle}
-                onChange={(e) => setEditedTitle(e.target.value)}
-                className="w-40 sm:w-64 h-8 text-base font-black tracking-tighter uppercase font-mono"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSaveTitle();
-                  if (e.key === "Escape") setIsEditingTitle(false);
-                }}
-              />
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleSaveTitle}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={() => setIsEditingTitle(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="truncate max-w-[150px] sm:max-w-[300px]">{video.title}</span>
-              {canEdit && (
+      <DashboardHeader
+        paths={[
+          {
+            label: resolvedTeamSlug,
+            href: teamHomePath(resolvedTeamSlug),
+            prewarmIntentHandlers: prewarmTeamIntentHandlers,
+          },
+          {
+            label: context?.project?.name ?? "project",
+            href: projectPath(resolvedTeamSlug, resolvedProjectId),
+            prewarmIntentHandlers: prewarmProjectIntentHandlers,
+          },
+          {
+            label: isEditingTitle ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  className="w-40 sm:w-64 h-8 text-base font-black tracking-tighter uppercase font-mono"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveTitle();
+                    if (e.key === "Escape") setIsEditingTitle(false);
+                  }}
+                />
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-6 w-6"
-                  onClick={startEditingTitle}
+                  className="h-8 w-8"
+                  onClick={handleSaveTitle}
                 >
-                  <Edit2 className="h-3 w-3" />
+                  <Check className="h-4 w-4" />
                 </Button>
-              )}
-              {video.status !== "ready" && (
-                <Badge
-                  variant={video.status === "failed" ? "destructive" : "secondary"}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8"
+                  onClick={() => setIsEditingTitle(false)}
                 >
-                  {video.status === "uploading" && "Uploading"}
-                  {video.status === "processing" && "Processing"}
-                  {video.status === "failed" && "Failed"}
-                </Badge>
-              )}
-            </div>
-          )
-        }
-      ]}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="truncate max-w-[150px] sm:max-w-[300px]">
+                  {video.title}
+                </span>
+                {canEdit && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={startEditingTitle}
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                )}
+                {video.status !== "ready" && (
+                  <Badge
+                    variant={
+                      video.status === "failed" ? "destructive" : "secondary"
+                    }
+                  >
+                    {video.status === "uploading" && "Uploading"}
+                    {video.status === "processing" && "Processing"}
+                    {video.status === "failed" && "Failed"}
+                  </Badge>
+                )}
+              </div>
+            ),
+          },
+        ]}
+      >
         {/* Desktop: inline actions */}
         <div className="hidden sm:flex items-center gap-3 text-xs text-[#888]">
           <span className="truncate max-w-[100px]">{video.uploaderName}</span>
           {video.duration && (
             <>
               <span className="text-[#ccc]">·</span>
-              <span className="font-mono">{formatDuration(video.duration)}</span>
+              <span className="font-mono">
+                {formatDuration(video.duration)}
+              </span>
             </>
           )}
           <VideoWatchers watchers={watchers} />
@@ -330,15 +389,17 @@ export default function VideoPage() {
           <VideoWorkflowStatusControl
             status={video.workflowStatus}
             size="lg"
-            disabled={!canEdit}
+            disabled={!video.canReview || video.status !== "ready"}
             onChange={(workflowStatus) => {
               void handleUpdateWorkflowStatus(workflowStatus);
             }}
           />
-          <Button variant="outline" onClick={() => setShareDialogOpen(true)}>
-            <LinkIcon className="mr-1.5 h-4 w-4" />
-            Share
-          </Button>
+          {!video.originalOnly && (
+            <Button variant="outline" onClick={() => setShareDialogOpen(true)}>
+              <LinkIcon className="mr-1.5 h-4 w-4" />
+              Share
+            </Button>
+          )}
           <Button
             variant="outline"
             className="lg:hidden"
@@ -356,7 +417,7 @@ export default function VideoPage() {
           <VideoWorkflowStatusControl
             status={video.workflowStatus}
             size="lg"
-            disabled={!canEdit}
+            disabled={!video.canReview || video.status !== "ready"}
             onChange={(workflowStatus) => {
               void handleUpdateWorkflowStatus(workflowStatus);
             }}
@@ -367,16 +428,19 @@ export default function VideoPage() {
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
-              <LinkIcon className="mr-2 h-4 w-4" />
-              Share
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setMobileCommentsOpen(true)}>
-              <MessageSquare className="mr-2 h-4 w-4" />
-              Comments{comments && comments.length > 0 ? ` (${comments.length})` : ""}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
+            <DropdownMenuContent align="end">
+              {!video.originalOnly && (
+                <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
+                  <LinkIcon className="mr-2 h-4 w-4" />
+                  Share
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => setMobileCommentsOpen(true)}>
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Comments
+                {comments && comments.length > 0 ? ` (${comments.length})` : ""}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </DashboardHeader>
@@ -385,11 +449,15 @@ export default function VideoPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Video player area — full black, Frame.io style */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-black">
-          {video.status === "processing" && isUsingOriginalFallback && activePlaybackUrl ? (
+          {video.status === "processing" &&
+          isUsingOriginalFallback &&
+          activePlaybackUrl ? (
             <div className="flex-shrink-0 flex items-center gap-2 bg-[#1a1a1a] px-4 py-2 text-sm text-white">
               <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[#2d5a2d]" />
               <span className="font-semibold">Original playback active.</span>
-              <span className="text-white/60">720p stream is still encoding.</span>
+              <span className="text-white/60">
+                720p stream is still encoding.
+              </span>
             </div>
           ) : null}
 
@@ -406,11 +474,15 @@ export default function VideoPage() {
               onRequestDownload={requestDownload}
               controlsBelow
               qualityOptionsConfig={[
-                {
-                  id: "mux720",
-                  label: playbackUrl ? "720p" : "720p (encoding...)",
-                  disabled: !playbackUrl,
-                },
+                ...(!video.originalOnly
+                  ? [
+                      {
+                        id: "mux720",
+                        label: playbackUrl ? "720p" : "720p (encoding...)",
+                        disabled: !playbackUrl,
+                      },
+                    ]
+                  : []),
                 {
                   id: "original",
                   label: "Original",
@@ -426,11 +498,28 @@ export default function VideoPage() {
             />
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              {video.status === "ready" && !playbackUrl ? (
+              {originalError ? (
+                <div
+                  role="alert"
+                  className="max-w-sm space-y-3 p-5 text-center text-white"
+                >
+                  <p>{originalError}</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setOriginalRetry((n) => n + 1)}
+                  >
+                    Retry original
+                  </Button>
+                </div>
+              ) : video.status === "ready" && !playbackUrl ? (
                 <div className="flex flex-col items-center gap-3 text-white">
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
                   <p className="text-sm font-medium text-white/85">
-                    {isLoadingPlayback ? "Loading stream..." : "Preparing stream..."}
+                    {video.originalOnly
+                      ? "Loading original…"
+                      : isLoadingPlayback
+                        ? "Loading stream..."
+                        : "Preparing stream..."}
                   </p>
                 </div>
               ) : (
@@ -462,7 +551,8 @@ export default function VideoPage() {
             </h2>
             {comments && comments.length > 0 && (
               <span className="text-[11px] font-medium text-[#888] bg-[#1a1a1a]/5 dark:bg-white/5 px-2 py-0.5 rounded-full">
-                {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
+                {comments.length}{" "}
+                {comments.length === 1 ? "comment" : "comments"}
               </span>
             )}
           </div>
@@ -534,11 +624,13 @@ export default function VideoPage() {
         </div>
       )}
 
-      <ShareDialog
-        videoId={resolvedVideoId}
-        open={shareDialogOpen}
-        onOpenChange={setShareDialogOpen}
-      />
+      {!video.originalOnly && (
+        <ShareDialog
+          videoId={resolvedVideoId}
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+        />
+      )}
     </div>
   );
 }

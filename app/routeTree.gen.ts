@@ -27,6 +27,7 @@ import { Route as DashboardTeamSlugRouteImport } from './routes/dashboard/$teamS
 import { Route as CompareWipsterRouteImport } from './routes/compare.wipster'
 import { Route as CompareFrameioRouteImport } from './routes/compare.frameio'
 import { Route as DashboardTeamSlugIndexRouteImport } from './routes/dashboard/$teamSlug.index'
+import { Route as DashboardTeamSlugTrackerRouteImport } from './routes/dashboard/$teamSlug.tracker'
 import { Route as DashboardTeamSlugSettingsRouteImport } from './routes/dashboard/$teamSlug.settings'
 import { Route as DashboardTeamSlugProjectIdRouteImport } from './routes/dashboard/$teamSlug.$projectId'
 import { Route as DashboardTeamSlugProjectIdIndexRouteImport } from './routes/dashboard/$teamSlug.$projectId.index'
@@ -122,6 +123,12 @@ const DashboardTeamSlugIndexRoute = DashboardTeamSlugIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardTeamSlugRoute,
 } as any)
+const DashboardTeamSlugTrackerRoute =
+  DashboardTeamSlugTrackerRouteImport.update({
+    id: '/tracker',
+    path: '/tracker',
+    getParentRoute: () => DashboardTeamSlugRoute,
+  } as any)
 const DashboardTeamSlugSettingsRoute =
   DashboardTeamSlugSettingsRouteImport.update({
     id: '/settings',
@@ -167,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/$teamSlug/$projectId': typeof DashboardTeamSlugProjectIdRouteWithChildren
   '/dashboard/$teamSlug/settings': typeof DashboardTeamSlugSettingsRoute
+  '/dashboard/$teamSlug/tracker': typeof DashboardTeamSlugTrackerRoute
   '/dashboard/$teamSlug/': typeof DashboardTeamSlugIndexRoute
   '/dashboard/$teamSlug/$projectId/$videoId': typeof DashboardTeamSlugProjectIdVideoIdRoute
   '/dashboard/$teamSlug/$projectId/': typeof DashboardTeamSlugProjectIdIndexRoute
@@ -188,6 +196,7 @@ export interface FileRoutesByTo {
   '/watch/$publicId': typeof WatchPublicIdRoute
   '/dashboard': typeof DashboardIndexRoute
   '/dashboard/$teamSlug/settings': typeof DashboardTeamSlugSettingsRoute
+  '/dashboard/$teamSlug/tracker': typeof DashboardTeamSlugTrackerRoute
   '/dashboard/$teamSlug': typeof DashboardTeamSlugIndexRoute
   '/dashboard/$teamSlug/$projectId/$videoId': typeof DashboardTeamSlugProjectIdVideoIdRoute
   '/dashboard/$teamSlug/$projectId': typeof DashboardTeamSlugProjectIdIndexRoute
@@ -213,6 +222,7 @@ export interface FileRoutesById {
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/$teamSlug/$projectId': typeof DashboardTeamSlugProjectIdRouteWithChildren
   '/dashboard/$teamSlug/settings': typeof DashboardTeamSlugSettingsRoute
+  '/dashboard/$teamSlug/tracker': typeof DashboardTeamSlugTrackerRoute
   '/dashboard/$teamSlug/': typeof DashboardTeamSlugIndexRoute
   '/dashboard/$teamSlug/$projectId/$videoId': typeof DashboardTeamSlugProjectIdVideoIdRoute
   '/dashboard/$teamSlug/$projectId/': typeof DashboardTeamSlugProjectIdIndexRoute
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/dashboard/$teamSlug/$projectId'
     | '/dashboard/$teamSlug/settings'
+    | '/dashboard/$teamSlug/tracker'
     | '/dashboard/$teamSlug/'
     | '/dashboard/$teamSlug/$projectId/$videoId'
     | '/dashboard/$teamSlug/$projectId/'
@@ -260,6 +271,7 @@ export interface FileRouteTypes {
     | '/watch/$publicId'
     | '/dashboard'
     | '/dashboard/$teamSlug/settings'
+    | '/dashboard/$teamSlug/tracker'
     | '/dashboard/$teamSlug'
     | '/dashboard/$teamSlug/$projectId/$videoId'
     | '/dashboard/$teamSlug/$projectId'
@@ -284,6 +296,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/dashboard/$teamSlug/$projectId'
     | '/dashboard/$teamSlug/settings'
+    | '/dashboard/$teamSlug/tracker'
     | '/dashboard/$teamSlug/'
     | '/dashboard/$teamSlug/$projectId/$videoId'
     | '/dashboard/$teamSlug/$projectId/'
@@ -433,6 +446,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardTeamSlugIndexRouteImport
       parentRoute: typeof DashboardTeamSlugRoute
     }
+    '/dashboard/$teamSlug/tracker': {
+      id: '/dashboard/$teamSlug/tracker'
+      path: '/tracker'
+      fullPath: '/dashboard/$teamSlug/tracker'
+      preLoaderRoute: typeof DashboardTeamSlugTrackerRouteImport
+      parentRoute: typeof DashboardTeamSlugRoute
+    }
     '/dashboard/$teamSlug/settings': {
       id: '/dashboard/$teamSlug/settings'
       path: '/settings'
@@ -484,12 +504,14 @@ const DashboardTeamSlugProjectIdRouteWithChildren =
 interface DashboardTeamSlugRouteChildren {
   DashboardTeamSlugProjectIdRoute: typeof DashboardTeamSlugProjectIdRouteWithChildren
   DashboardTeamSlugSettingsRoute: typeof DashboardTeamSlugSettingsRoute
+  DashboardTeamSlugTrackerRoute: typeof DashboardTeamSlugTrackerRoute
   DashboardTeamSlugIndexRoute: typeof DashboardTeamSlugIndexRoute
 }
 
 const DashboardTeamSlugRouteChildren: DashboardTeamSlugRouteChildren = {
   DashboardTeamSlugProjectIdRoute: DashboardTeamSlugProjectIdRouteWithChildren,
   DashboardTeamSlugSettingsRoute: DashboardTeamSlugSettingsRoute,
+  DashboardTeamSlugTrackerRoute: DashboardTeamSlugTrackerRoute,
   DashboardTeamSlugIndexRoute: DashboardTeamSlugIndexRoute,
 }
 

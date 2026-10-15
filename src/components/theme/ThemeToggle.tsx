@@ -1,5 +1,7 @@
 "use client";
 
+import { Moon, Sun } from "lucide-react";
+
 import {
   createContext,
   useCallback,
@@ -14,15 +16,8 @@ const THEME_STORAGE_KEY = "lawn-theme";
 
 type Theme = "light" | "dark";
 
-function getSystemTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
 function getInitialTheme(): Theme {
-  if (typeof document === "undefined") return "light";
+  if (typeof document === "undefined") return "dark";
 
   const attributeTheme = document.documentElement.getAttribute("data-theme");
   if (attributeTheme === "dark" || attributeTheme === "light") {
@@ -34,7 +29,7 @@ function getInitialTheme(): Theme {
     return storedTheme;
   }
 
-  return getSystemTheme();
+  return "dark";
 }
 
 interface ThemeContextValue {
@@ -47,7 +42,11 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const emptySubscribe = () => () => {};
 
 function useMounted() {
-  return useSyncExternalStore(emptySubscribe, () => true, () => false);
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 }
 
 export function useTheme() {
@@ -77,7 +76,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (!mounted) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "l") {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === "l"
+      ) {
         e.preventDefault();
         toggleTheme();
       }
@@ -89,10 +92,31 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(
     () => ({ theme, toggleTheme, mounted }),
-    [theme, toggleTheme, mounted]
+    [theme, toggleTheme, mounted],
   );
 
   return (
     <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
+}
+
+export function ThemeToggleButton() {
+  const { theme, toggleTheme, mounted } = useTheme();
+
+  if (!mounted) return <div className="w-8 h-8" />;
+
+  return (
+    <button
+      onClick={toggleTheme}
+      className="flex h-9 w-9 items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface hover:text-foreground"
+      title={`Switch to ${theme === "dark" ? "light" : "dark"} mode (⌘⇧L)`}
+      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+    >
+      {theme === "dark" ? (
+        <Sun className="h-4 w-4" />
+      ) : (
+        <Moon className="h-4 w-4" />
+      )}
+    </button>
   );
 }

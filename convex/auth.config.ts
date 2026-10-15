@@ -1,8 +1,37 @@
+const mode = process.env.AUTH_PROVIDER || "clerk";
+if (mode !== "clerk" && mode !== "oidc") {
+  throw new Error("Unknown AUTH_PROVIDER");
+}
+const domain =
+  mode === "oidc"
+    ? process.env.OIDC_ISSUER_DOMAIN
+    : process.env.CLERK_JWT_ISSUER_DOMAIN;
+const audience = mode === "oidc" ? process.env.OIDC_AUDIENCE : "convex";
+if (mode === "oidc") {
+  if (!domain || !audience)
+    throw new Error("OIDC issuer and audience are required");
+  const issuer = new URL(domain);
+  if (
+    issuer.protocol !== "https:" ||
+    issuer.username ||
+    issuer.password ||
+    issuer.search ||
+    issuer.hash
+  ) {
+    throw new Error("OIDC issuer must be a secure URL");
+  }
+}
 export default {
-  providers: [
-    {
-      domain: process.env.CLERK_JWT_ISSUER_DOMAIN,
-      applicationID: "convex",
-    },
-  ],
+  providers:
+    mode === "oidc"
+      ? [
+          {
+            type: "customJwt" as const,
+            issuer: domain!,
+            jwks: `${domain!.replace(/\/$/, "")}/protocol/openid-connect/certs`,
+            algorithm: "RS256" as const,
+            applicationID: audience!,
+          },
+        ]
+      : [{ domain, applicationID: audience }],
 };
