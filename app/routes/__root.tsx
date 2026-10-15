@@ -86,10 +86,7 @@ function RootDocument({ children }: { children: ReactNode }) {
           document.documentElement.setAttribute("data-theme", stored);
           return;
         }
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        if (prefersDark) {
-          document.documentElement.setAttribute("data-theme", "dark");
-        }
+        document.documentElement.setAttribute("data-theme", "dark");
       } catch {}
     })();
   `;

@@ -25,8 +25,7 @@ type Request = {
   requestKey: string;
   expectedActorId: string;
 };
-const selectClass =
-  "w-full min-w-0 border-2 border-[#ccc] bg-[#f0f0e8] px-3 py-2 text-sm";
+const selectClass = "agency-select";
 const keyFor = (team: string, actor: string) =>
   `lawn:pending-workload:${team}:${actor}`;
 function restored(team: string, actor: string): Request | null {

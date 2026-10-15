@@ -35,8 +35,9 @@ We want to make things convenient, but we don't want to be insecure. Be thoughtf
 This fork combines assignments, review and the finished-content library for the
 agency. Keep changes small and retain fast route loaders. Jacob requested Atrium’s visual
 language: navy surfaces, amber action color, Geist sans-serif and restrained borders.
-The head of CMOs uses an owner/admin account to assign a producer, director/reviewer,
-CMO and deadline. Members produce assigned work; the assigned director or an admin
+The Head CMO uses an owner/admin account to assign client workloads by count,
+deadline and content-team pair. Directors plan the generated slots; assigned members
+produce the work. The assigned director or an admin
 reviews tracked edits. CMOs can use viewer access to retrieve approved content.
 Business assignments do not grant team membership or administrative access.
 

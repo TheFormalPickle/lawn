@@ -49,7 +49,7 @@ export function UploadProgress({
   onRetryConfirmation,
 }: UploadProgressProps) {
   return (
-    <div className="border-2 border-[#1a1a1a] p-4 bg-[#f0f0e8]">
+    <div className="rounded-xl border border-line p-4 bg-[var(--surface)]">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <p className="font-bold text-[#1a1a1a] truncate text-sm">
@@ -59,7 +59,7 @@ export function UploadProgress({
         </div>
         <div className="flex items-center gap-2">
           {status === "complete" && (
-            <CheckCircle className="h-5 w-5 text-[#2d5a2d]" />
+            <CheckCircle className="h-5 w-5 text-[var(--success)]" />
           )}
           {(status === "error" || status === "unconfirmed") && (
             <AlertCircle className="h-5 w-5 text-[#dc2626]" />

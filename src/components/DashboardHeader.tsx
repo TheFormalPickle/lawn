@@ -47,9 +47,9 @@ export function DashboardHeader({
   );
 
   return (
-    <header className="flex-shrink-0 border-b-2 border-[#1a1a1a] bg-[#f0f0e8] grid grid-cols-[1fr_auto] sm:grid-cols-[auto_1fr_auto] items-center px-4 sm:px-6">
+    <header className="flex-shrink-0 border-b border-line bg-[var(--surface)] grid grid-cols-[1fr_auto] sm:grid-cols-[auto_1fr_auto] items-center px-4 sm:px-6">
       {/* Breadcrumb */}
-      <div className="flex items-center text-xl font-black tracking-tighter text-[#1a1a1a] min-w-0 h-11 sm:h-14">
+      <div className="flex items-center text-xl font-semibold tracking-tight text-[#1a1a1a] min-w-0 h-11 sm:h-14">
         <Link
           to="/dashboard"
           preload="intent"
@@ -83,20 +83,20 @@ export function DashboardHeader({
       </div>
 
       {/* User controls — pinned top-right */}
-      <div className="row-start-1 col-start-2 sm:col-start-3 flex items-center gap-4 pl-4 border-l-2 border-[#1a1a1a]/10 h-8">
+      <div className="row-start-1 col-start-2 sm:col-start-3 flex items-center gap-4 pl-4 border-l border-line h-8">
         <ThemeToggleButton />
         <UserButton
           appearance={{
             variables: {
-              colorText: "#1a1a1a",
-              colorTextSecondary: "#888",
-              colorBackground: "#f0f0e8",
+              colorText: "var(--foreground)",
+              colorTextSecondary: "var(--foreground-muted)",
+              colorBackground: "var(--surface)",
             },
             elements: {
-              avatarBox: "w-8 h-8 rounded-none border-2 border-[#1a1a1a]",
-              userButtonPopoverCard: "bg-[#f0f0e8] border-2 border-[#1a1a1a] rounded-none shadow-[8px_8px_0px_0px_var(--shadow-color)]",
-              userButtonPopoverActionButton: "!text-[#1a1a1a] hover:!bg-[#e8e8e0] rounded-none",
-              userButtonPopoverActionButtonText: "!text-[#1a1a1a] hover:!text-[#1a1a1a] font-mono font-bold",
+              avatarBox: "w-8 h-8 rounded-full border border-line",
+              userButtonPopoverCard: "bg-[var(--surface)] border border-line rounded-xl shadow-xl",
+              userButtonPopoverActionButton: "!text-[#1a1a1a] hover:!bg-[#e8e8e0] rounded-lg",
+              userButtonPopoverActionButtonText: "!text-[#1a1a1a] hover:!text-[#1a1a1a] font-sans font-medium",
               userButtonPopoverActionButtonIcon: "!text-[#1a1a1a] hover:!text-[#1a1a1a]",
               userButtonPopoverFooter: "hidden",
             },

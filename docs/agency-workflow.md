@@ -138,3 +138,20 @@ Raw video/photo/audio browsing remains a separate next milestone. The user’s
 workflow definition is authoritative; Monday’s unavailable board reader does not
 block this implementation or imply an import. No Atrium services/data are linked.
 Atrium's checked design-system source/screens are a read-only style reference.
+
+## Low-friction Atrium-style interface
+
+The tracker now uses Atrium’s navy/amber/Geist visual language with restrained
+borders, one filter toolbar, workload rows and responsive navigation. No fake
+metrics or new workflow state were added. Head intake remains one request, director
+planning edits the existing slot, and finished content retains server-checked
+approval/download gates. Geist is locally served with its OFL license. Explicit
+light preference and the theme toggle remain. See [interface direction and
+verification](interface-direction.md) for the concept comparison and limits.
+
+The built local workflow passes the same five-slot/two-team journey, including
+refresh after a lost workload confirmation and actual review/download persistence.
+Source checks pass with pinned Bun 1.3.6 and Node 22. Hosted Linux and Windows
+install/test/types/lint/build passed workload commit183e690; subsequent interface
+commits require their own hosted results. Raw-asset browsing is still the next
+functional milestone, followed by intended sign-in/media-provider rehearsal.
