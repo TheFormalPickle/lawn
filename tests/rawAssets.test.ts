@@ -579,3 +579,150 @@ test("confirmed ETag is immutable and detaching a source preserves the file and 
     "planned",
   );
 });
+
+test("catalog revisions certify the same saved page and advance only visible changes, with member-only access", async () => {
+  const f = await fixture();
+  assert.equal(
+    await f.director.query(api.rawAssets.revision, { teamId: f.teamId }),
+    0,
+  );
+  const initial = await f.member.query(api.rawAssets.list, {
+    teamId: f.teamId,
+    search: "",
+    paginationOpts: { numItems: 50, cursor: null },
+  });
+  assert.equal(initial.catalogRevision, 0);
+  assert.equal(initial.page.length, 0);
+  const pending = await f.member.mutation(api.rawAssets.create, f.input);
+  assert.equal(
+    await f.director.query(api.rawAssets.revision, { teamId: f.teamId }),
+    0,
+  );
+  const id = await f.ready();
+  assert.equal(id, pending);
+  const readyPage = await f.director.query(api.rawAssets.list, {
+    teamId: f.teamId,
+    search: "",
+    paginationOpts: { numItems: 50, cursor: null },
+  });
+  assert.equal(readyPage.catalogRevision, 1);
+  assert.deepEqual(
+    readyPage.page.map((row) => row._id),
+    [id],
+  );
+  await f.ready(); // Exact confirmation replay is not a new visible change.
+  assert.equal(
+    await f.director.query(api.rawAssets.revision, { teamId: f.teamId }),
+    1,
+  );
+  const other = await f.ready({ requestKey: "next-file" });
+  assert.equal(
+    await f.director.query(api.rawAssets.revision, { teamId: f.teamId }),
+    2,
+  );
+  await f.member.mutation(api.rawAssets.remove, { assetId: id });
+  await f.member.mutation(api.rawAssets.remove, { assetId: id });
+  assert.equal(
+    await f.director.query(api.rawAssets.revision, { teamId: f.teamId }),
+    3,
+  );
+  const final = await f.director.query(api.rawAssets.list, {
+    teamId: f.teamId,
+    search: "",
+    paginationOpts: { numItems: 50, cursor: null },
+  });
+  assert.equal(final.catalogRevision, 3);
+  assert.deepEqual(
+    final.page.map((row) => row._id),
+    [other],
+  );
+  await assert.rejects(
+    f.cmo.query(api.rawAssets.revision, { teamId: f.teamId }),
+    /member role/,
+  );
+  await assert.rejects(
+    f.t.query(api.rawAssets.revision, { teamId: f.teamId }),
+    /authenticated/,
+  );
+  await f.drain();
+});
+
+test("pending discards do not invent changes and project removal invalidates a previously certified catalog", async () => {
+  const f = await fixture();
+  const pending = await f.member.mutation(api.rawAssets.create, f.input);
+  await f.member.mutation(api.rawAssets.remove, { assetId: pending });
+  assert.equal(
+    await f.director.query(api.rawAssets.revision, { teamId: f.teamId }),
+    0,
+  );
+  await f.ready({ requestKey: "ready-after-discard" });
+  const old = await f.director.query(api.rawAssets.revision, {
+    teamId: f.teamId,
+  });
+  await f.head.mutation(api.projects.remove, { projectId: f.projectId });
+  assert(
+    (await f.director.query(api.rawAssets.revision, { teamId: f.teamId })) >
+      old,
+  );
+  const result = await f.director.query(api.rawAssets.list, {
+    teamId: f.teamId,
+    search: "",
+    paginationOpts: { numItems: 50, cursor: null },
+  });
+  assert.equal(result.page.length, 0);
+  assert.equal(
+    result.catalogRevision,
+    await f.director.query(api.rawAssets.revision, { teamId: f.teamId }),
+  );
+  await f.drain();
+});
+
+test("unfiltered client pages keep newer photos and audio ahead of older video, including beyond the first page", async () => {
+  const f = await fixture();
+  for (let index = 0; index < 51; index++)
+    await f.ready({
+      requestKey: `old-video-${index}`,
+      filename: `Old video ${index}.mp4`,
+    });
+  const photo = await f.ready({
+    requestKey: "new-photo",
+    filename: "New source.png",
+    contentType: "image/png",
+  });
+  const audio = await f.ready({
+    requestKey: "new-audio",
+    filename: "New source.wav",
+    contentType: "audio/wav",
+  });
+  const first = await f.director.query(api.rawAssets.list, {
+    teamId: f.teamId,
+    projectId: f.projectId,
+    search: "",
+    paginationOpts: { numItems: 50, cursor: null },
+  });
+  assert.deepEqual(
+    first.page.slice(0, 2).map((row) => row._id),
+    [audio, photo],
+  );
+  assert.equal(first.page.length, 50);
+  assert.equal(first.isDone, false);
+  const next = await f.director.query(api.rawAssets.list, {
+    teamId: f.teamId,
+    projectId: f.projectId,
+    search: "",
+    paginationOpts: { numItems: 50, cursor: first.continueCursor },
+  });
+  assert.equal(next.page.length, 3);
+  assert.equal(
+    new Set([...first.page, ...next.page].map((row) => row._id)).size,
+    53,
+  );
+  const videos = await f.director.query(api.rawAssets.list, {
+    teamId: f.teamId,
+    projectId: f.projectId,
+    kind: "video",
+    search: "",
+    paginationOpts: { numItems: 50, cursor: null },
+  });
+  assert(videos.page.every((row) => row.kind === "video"));
+});

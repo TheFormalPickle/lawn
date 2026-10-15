@@ -34,7 +34,18 @@ export function RawCatalog({
     [loaded, setLoaded] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [stale, setStale] = useState(false);
+    [stale, setStale] = useState(false),
+    [snapshotRevision, setSnapshotRevision] = useState<number | null>(null),
+    [liveRevision, setLiveRevision] = useState<number | null>(null),
+    [pageChanged, setPageChanged] = useState(false),
+    [updatesError, setUpdatesError] = useState(false),
+    [watchAttempt, setWatchAttempt] = useState(0);
+  const snapshot = useRef<number | null>(null);
+  const changed =
+    pageChanged ||
+    (snapshotRevision !== null &&
+      liveRevision !== null &&
+      snapshotRevision !== liveRevision);
   const failedCursor = useRef<string | undefined>(undefined);
   const epoch = useRef(0),
     inFlight = useRef(false),
@@ -63,6 +74,11 @@ export function RawCatalog({
           paginationOpts: { cursor: next ?? null, numItems: 50 },
         });
         if (request !== epoch.current) return;
+        if (next && page.catalogRevision !== snapshot.current) {
+          // Do not mix an older head with a page read after a library change.
+          setPageChanged(true);
+          return;
+        }
         setRows((old) =>
           next
             ? [
@@ -76,6 +92,9 @@ export function RawCatalog({
         setDone(page.isDone);
         setLoaded(true);
         if (!next) {
+          snapshot.current = page.catalogRevision;
+          setSnapshotRevision(page.catalogRevision);
+          setPageChanged(false);
           setStale(false);
           if (expiry.current) clearTimeout(expiry.current);
           expiry.current = setTimeout(() => setStale(true), 60_000);
@@ -99,6 +118,33 @@ export function RawCatalog({
     [convex, args],
   );
   useEffect(() => {
+    setLiveRevision(null);
+    setUpdatesError(false);
+    const watch = convex.watchQuery(api.rawAssets.revision, { teamId });
+    const update = () => {
+      try {
+        const revision = watch.localQueryResult();
+        if (revision !== undefined) {
+          setLiveRevision(revision);
+          setUpdatesError(false);
+        }
+      } catch (e) {
+        setUpdatesError(true);
+        if (/role|authenticated|member/i.test(assetError(e))) {
+          setRows([]);
+          setLoaded(false);
+        }
+      }
+    };
+    const unsubscribe = watch.onUpdate(update);
+    update();
+    return unsubscribe;
+  }, [convex, teamId, watchAttempt]);
+  const refresh = () => {
+    setWatchAttempt((n) => n + 1);
+    void load();
+  };
+  useEffect(() => {
     void load();
     return () => {
       epoch.current++;
@@ -109,12 +155,7 @@ export function RawCatalog({
     <div className="agency-panel">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
         <h2 className="font-semibold">Source files</h2>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={busy}
-          onClick={() => void load()}
-        >
+        <Button size="sm" variant="ghost" disabled={busy} onClick={refresh}>
           <RefreshCw />
           Refresh
         </Button>
@@ -141,13 +182,16 @@ export function RawCatalog({
           </Button>
         </div>
       )}
-      {stale && !error && (
+      {(changed || updatesError || stale) && !error && (
         <p
           role="status"
           className="border-b border-line p-4 text-sm text-muted"
         >
-          This catalog snapshot may have changed. Refresh to check for new
-          files.
+          {changed
+            ? "The workspace library changed. Refresh to see new or removed files."
+            : updatesError
+              ? "Live library updates are unavailable. Refresh to check current files."
+              : "This catalog snapshot may have changed. Refresh to check for new files."}
         </p>
       )}
       {!loaded && busy && (
@@ -155,20 +199,26 @@ export function RawCatalog({
           Loading source files…
         </p>
       )}
-      {loaded && !error && !busy && rows.length === 0 && (
-        <div className="p-6">
-          <h3 className="font-medium">
-            {done
-              ? "No source files match this view"
-              : "No matches on this page"}
-          </h3>
-          <p className="mt-2 text-sm text-muted">
-            {done
-              ? "Upload raw footage, photos or audio, or change the filters."
-              : "Continue loading to look through the remaining files."}
-          </p>
-        </div>
-      )}
+      {loaded &&
+        !error &&
+        !busy &&
+        !changed &&
+        !updatesError &&
+        !stale &&
+        rows.length === 0 && (
+          <div className="p-6">
+            <h3 className="font-medium">
+              {done
+                ? "No source files match this view"
+                : "No matches on this page"}
+            </h3>
+            <p className="mt-2 text-sm text-muted">
+              {done
+                ? "Upload raw footage, photos or audio, or change the filters."
+                : "Continue loading to look through the remaining files."}
+            </p>
+          </div>
+        )}
       {rows.map((row) => {
         const Icon = icons[row.kind];
         return (
@@ -195,7 +245,7 @@ export function RawCatalog({
         <div className="p-4">
           <Button
             variant="outline"
-            disabled={busy || !cursor}
+            disabled={busy || !cursor || changed || updatesError}
             onClick={() => void load(cursor!)}
           >
             {busy ? "Loading…" : "Load more source files"}

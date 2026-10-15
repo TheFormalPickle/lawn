@@ -4,6 +4,7 @@ import { v } from "convex/values";
 export default defineSchema({
   teams: defineTable({
     rawAssetBytes: v.optional(v.number()),
+    rawCatalogRevision: v.optional(v.number()),
     name: v.string(),
     slug: v.string(),
     ownerClerkId: v.string(),
@@ -115,6 +116,7 @@ export default defineSchema({
   }).index("by_team", ["teamId"])
     .index("by_project", ["projectId"])
     .index("by_team_status", ["teamId", "status"])
+    .index("by_team_status_scope", ["teamId", "status", "projectId"])
     .index("by_team_status_scope_kind", ["teamId", "status", "projectId", "kind"])
     .index("by_team_status_kind", ["teamId", "status", "kind"])
     .index("by_team_status_uploader", ["teamId", "status", "uploadedByClerkId"])

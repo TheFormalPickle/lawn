@@ -5,6 +5,7 @@ import {
   query,
   internalMutation,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -18,6 +19,24 @@ const kind = v.union(
   v.literal("photo"),
   v.literal("audio"),
 );
+async function catalogRevision(ctx: Pick<QueryCtx, "db">, teamId: Id<"teams">) {
+  const team = await ctx.db.get(teamId);
+  if (!team) throw new Error("Workspace is unavailable.");
+  return team.rawCatalogRevision ?? 0;
+}
+async function advanceCatalog(ctx: MutationCtx, teamId: Id<"teams">) {
+  await ctx.db.patch(teamId, {
+    rawCatalogRevision: (await catalogRevision(ctx, teamId)) + 1,
+  });
+}
+// A small reactive signal, not another catalog, counter or provider request.
+export const revision = query({
+  args: { teamId: v.id("teams") },
+  handler: async (ctx, { teamId }) => {
+    await requireTeamAccess(ctx, teamId, "member");
+    return catalogRevision(ctx, teamId);
+  },
+});
 export const list = query({
   args: {
     teamId: v.id("teams"),
@@ -56,16 +75,26 @@ export const list = query({
             : projectScoped;
         })
       : args.projectId || args.sharedOnly
-        ? ctx.db
-            .query("rawAssets")
-            .withIndex("by_team_status_scope_kind", (q) => {
-              const scoped = q
-                .eq("teamId", args.teamId)
-                .eq("status", "ready")
-                .eq("projectId", args.projectId);
-              return args.kind ? scoped.eq("kind", args.kind) : scoped;
-            })
-            .order("desc")
+        ? args.kind
+          ? ctx.db
+              .query("rawAssets")
+              .withIndex("by_team_status_scope_kind", (q) => {
+                const scoped = q
+                  .eq("teamId", args.teamId)
+                  .eq("status", "ready")
+                  .eq("projectId", args.projectId);
+                return args.kind ? scoped.eq("kind", args.kind) : scoped;
+              })
+              .order("desc")
+          : ctx.db
+              .query("rawAssets")
+              .withIndex("by_team_status_scope", (q) =>
+                q
+                  .eq("teamId", args.teamId)
+                  .eq("status", "ready")
+                  .eq("projectId", args.projectId),
+              )
+              .order("desc")
         : args.kind
           ? ctx.db
               .query("rawAssets")
@@ -88,6 +117,7 @@ export const list = query({
     });
     return {
       ...result,
+      catalogRevision: await catalogRevision(ctx, args.teamId),
       page: result.page.map(
         ({
           _id,
@@ -315,7 +345,10 @@ export const complete = internalMutation({
       throw new Error(
         "The confirmed original has changed. Upload a new source explicitly.",
       );
-    await ctx.db.patch(assetId, { status: "ready", storageETag: etag });
+    if (asset.status !== "ready") {
+      await ctx.db.patch(assetId, { status: "ready", storageETag: etag });
+      await advanceCatalog(ctx, asset.teamId);
+    }
   },
 });
 
@@ -327,6 +360,7 @@ export async function removeProjectAssets(
     .query("rawAssets")
     .withIndex("by_project", (q) => q.eq("projectId", projectId))
     .collect()) {
+    if (asset.status === "ready") await advanceCatalog(ctx, asset.teamId);
     if (asset.status !== "removed")
       await adjustRawAssetBytes(ctx, asset.teamId, -asset.fileSize);
     if (asset.storageKey)
@@ -354,6 +388,7 @@ export const remove = mutation({
         "Only the uploader or an administrator can remove this asset.",
       );
     if (asset.status === "removed") return;
+    if (asset.status === "ready") await advanceCatalog(ctx, asset.teamId);
     // Retain the request receipt: a late retry cannot resurrect removed content.
     await adjustRawAssetBytes(ctx, asset.teamId, -asset.fileSize);
     await ctx.db.patch(assetId, { status: "removed" });

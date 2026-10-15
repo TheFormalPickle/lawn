@@ -99,3 +99,9 @@ V1 production target is Friday, October 23, 2026. Prioritize the content workflo
 real deployment rehearsal and recovery over new subsystems. Scope, dated preparation
 targets and launch evidence gates are in docs/v1-launch.md. Preserve the current
 Atrium and NAS while preparing the new installation.
+
+October15 follow-up: Jacob explicitly requested rebranding this build as Atrium
+and a closer match to Atrium's actual interface before going online. Prior visual
+checks are historical milestones, not his design acceptance. Keep source identity,
+roles, pending requests and saved theme preferences during the rebrand. The domain
+is open in Safari for later setup; no DNS or production action was requested.

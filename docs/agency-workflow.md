@@ -55,7 +55,7 @@ They must never be deployed or copied into production.
 
 ## Verification and remaining acceptance
 
-The regression suite passes 34 tests across six files. It exercises Convex
+The regression suite passes 37 tests across six files. It exercises Convex
 handlers against an in-memory test backend: roles, cross-team/project linking,
 create replay identity, current-version approval, stale edits, deletion cleanup,
 existing-video compatibility and same-ID original-file replacement.
@@ -223,3 +223,24 @@ Run `bun run typecheck:convex` as well as root types, tests, lint and build. It 
 runs the actual strict Convex TypeScript project without deploying; Linux/Windows
 CI includes this independent backend check. Earlier root-only types could pass a
 candidate rejected by the local backend’s stricter target. No checks were relaxed.
+
+## Shared-library change awareness
+
+A producer's completed upload or removal now advances a workspace catalog revision
+inside the same transaction as its visible metadata. Catalog pages include that
+revision; a small member-only reactive subscription tells colleagues the library
+changed without fetching every file or polling storage. Existing files, filters
+and open previews stay in place; Refresh retrieves the latest view. A known change,
+failed live-update read or expired snapshot cannot keep claiming the view is empty.
+A page read after a newer revision cannot be appended to an older head. Exact
+confirmation/removal replay does not invent another change. Notifications are
+workspace-wide, not a claim that every active filter gained a match.
+
+Client-filtered untyped pages now use an index without media kind as an ordering
+prefix. New photos/audio are no longer buried behind older videos. Typed filters
+retain their exact index. Actual saved-record/browser acceptance verifies a
+separate producer's original upload, immediate director notification, no automatic
+catalog polling, controlled503/exact-client retry, unchanged open decoded preview,
+replay/removal and a completed newer-revision page rejected while preserving the
+loaded50. The existing62-record/actual60-second expiry/paging recovery also passes.
+This is local synthetic-auth/loopback-storage evidence, not live provider proof.
