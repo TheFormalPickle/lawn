@@ -1,5 +1,5 @@
 import { authAppearance } from "@/lib/authAppearance";
-import { SignIn } from "@clerk/tanstack-react-start";
+import { SignIn } from "@/lib/auth";
 import { useRouterState } from "@tanstack/react-router";
 
 export default function SignInPage() {

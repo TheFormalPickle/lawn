@@ -11,6 +11,7 @@ import { Id } from "./_generated/dataModel";
 import { generateUniqueToken } from "./security";
 import { resolveActiveShareGrant } from "./shareAccess";
 import { canProduceContent, canReviewContent } from "./contentWorkflow";
+import { mediaMode } from "./mediaPolicy";
 import { matchesMuxUpload } from "./uploadIdentity";
 import { assertTeamCanStoreBytes } from "./billingHelpers";
 
@@ -96,7 +97,7 @@ export const create = mutation({
       status: "uploading",
       muxAssetStatus: "preparing",
       workflowStatus: "review",
-      visibility: "public",
+      visibility: mediaMode() === "original" ? "private" : "public",
       publicId,
     });
 
@@ -375,6 +376,8 @@ export const setUploadInfo = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.videoId, {
       s3Key: args.s3Key,
+      s3ETag: undefined,
+      originalOnly: undefined,
       muxUploadId: undefined,
       muxAssetId: undefined,
       muxPlaybackId: undefined,
@@ -397,6 +400,7 @@ export const reconcileUploadedObjectMetadata = internalMutation({
     uploadId: v.string(),
     fileSize: v.number(),
     contentType: v.string(),
+    storageETag: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const video = await ctx.db.get(args.videoId);
@@ -405,6 +409,8 @@ export const reconcileUploadedObjectMetadata = internalMutation({
     }
 
     if (video.s3Key !== args.uploadId) return false;
+    if (video.s3ETag && args.storageETag && video.s3ETag !== args.storageETag)
+      throw new Error("The uploaded original changed. Upload a new edit.");
 
     const project = await ctx.db.get(video.projectId);
     if (!project) {
@@ -427,6 +433,28 @@ export const reconcileUploadedObjectMetadata = internalMutation({
     await ctx.db.patch(args.videoId, {
       fileSize: actualSize,
       contentType: args.contentType,
+      s3ETag: args.storageETag ?? video.s3ETag,
+    });
+    return true;
+  },
+});
+
+export const markOriginalReady = internalMutation({
+  args: { videoId: v.id("videos"), uploadId: v.string() },
+  handler: async (ctx, args) => {
+    if (mediaMode() !== "original")
+      throw new Error("Original-only mode is not enabled.");
+    const video = await ctx.db.get(args.videoId);
+    if (!video || video.s3Key !== args.uploadId) return false;
+    if (video.status === "ready" && video.originalOnly) return false;
+    if (video.status !== "uploading" || !video.s3ETag) return false;
+    await ctx.db.patch(args.videoId, {
+      status: "ready",
+      originalOnly: true,
+      uploadError: undefined,
+      muxAssetStatus: undefined,
+      muxAssetId: undefined,
+      muxPlaybackId: undefined,
     });
     return true;
   },
@@ -439,7 +467,8 @@ export const markAsProcessing = internalMutation({
   },
   handler: async (ctx, args) => {
     const video = await ctx.db.get(args.videoId);
-    if (!video || video.s3Key !== args.uploadId) throw new Error("This upload was replaced.");
+    if (!video || video.s3Key !== args.uploadId)
+      throw new Error("This upload was replaced.");
     if (video.status === "processing" || video.status === "ready") return false;
     await ctx.db.patch(args.videoId, {
       status: "processing",
@@ -461,7 +490,12 @@ export const markAsReady = internalMutation({
   },
   handler: async (ctx, args) => {
     const video = await ctx.db.get(args.videoId);
-    if (!video || !matchesMuxUpload(video, args) || (video.status !== "processing" && video.status !== "ready")) return false;
+    if (
+      !video ||
+      !matchesMuxUpload(video, args) ||
+      (video.status !== "processing" && video.status !== "ready")
+    )
+      return false;
     await ctx.db.patch(args.videoId, {
       muxAssetId: args.muxAssetId,
       muxPlaybackId: args.muxPlaybackId,
@@ -503,7 +537,12 @@ export const setMuxAssetReference = internalMutation({
   },
   handler: async (ctx, args) => {
     const video = await ctx.db.get(args.videoId);
-    if (!video || !matchesMuxUpload(video, args) || video.status !== "processing") return false;
+    if (
+      !video ||
+      !matchesMuxUpload(video, args) ||
+      video.status !== "processing"
+    )
+      return false;
     await ctx.db.patch(args.videoId, {
       muxAssetId: args.muxAssetId,
       muxAssetStatus: "preparing",

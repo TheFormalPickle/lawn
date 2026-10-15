@@ -27,7 +27,72 @@ does not restrict signup, change public share defaults, cancel old subscriptions
 or make the installation private on the network. Use it for this new installation;
 do not switch a live paid customer deployment without reconciling its billing.
 
-## Set up development before shared access
+## Self-hosted beta configuration
+
+Jacob chose to pursue self-hosting on October 15 rather than require new cloud
+accounts. Convex can run as its official isolated Docker backend without a cloud
+account. The authentication candidate uses Keycloak's standard OIDC authorization
+code flow with PKCE S256 and keeps the existing backend membership/actor checks.
+This is an implementation path, not proof that the online sign-in/media workflow
+has passed acceptance yet.
+
+Frontend configuration:
+
+```text
+VITE_AUTH_PROVIDER=keycloak
+VITE_CONVEX_URL=https://beta.atriumsuite.com
+VITE_CONVEX_SITE_URL=https://beta.atriumsuite.com
+VITE_OIDC_URL=https://beta.atriumsuite.com/auth
+VITE_OIDC_REALM=atrium
+VITE_OIDC_CLIENT_ID=atrium-web
+```
+
+Backend authentication configuration:
+
+```text
+AUTH_PROVIDER=oidc
+OIDC_ISSUER_DOMAIN=https://beta.atriumsuite.com/auth/realms/atrium
+OIDC_AUDIENCE=atrium-api
+LAWN_MEDIA_MODE=original
+```
+
+Original-only mode uses private, short-lived signed originals and preserves review
+permissions. It needs no Mux account, but playback requires a browser-supported
+codec/container; it does not transcode arbitrary camera footage. External share
+controls are unavailable for these private originals. Captured ETag/size/type are
+rechecked before playback and approved download; this is an issuance-time identity
+check, not a full-file checksum or revocation of an already issued short lease.
+
+The API origin has no `/api` suffix: the Convex client adds its own API paths.
+The issuer and audience must match the actual signed access token. Never omit the
+audience check or put an OIDC client secret/admin key in frontend variables.
+Unknown provider modes fail closed. Existing installations retain Clerk behavior,
+but must explicitly set backend `AUTH_PROVIDER=clerk` before publishing this
+configuration: Convex rejects an unset environment variable read from an auth
+configuration even when the JavaScript includes a fallback. An unset value is not
+a successful upgrade or permission to bypass authentication.
+
+Use an isolated Keycloak realm with public registration disabled, public SPA
+client `atrium-web`, standard code flow and enforced S256 PKCE, explicit access-token
+audience `atrium-api`, exact redirect origins and profile/email claims.
+Disable implicit/password grants and duplicate emails. Administrators provision
+only authorized identities; email editing stays admin-only until verified email
+change/recovery is configured. Tokens remain in memory and are refreshed through
+the official browser adapter; they are not saved in localStorage.
+
+The Keycloak account and Atrium workspace membership are separate. The agency
+administrator creates the exact identity in Keycloak, the person establishes
+their own credential through its normal account flow, and the workspace owner
+shares Atrium's email-bound membership link with the intended role. Creating an
+identity grants no workspace membership. Initial credential recovery is supervised
+administrator recovery until an actual SMTP reset flow is configured and tested.
+Do not describe an account as invited by email when no email has been sent.
+
+## Existing managed-provider setup
+
+The following is the upstream alternative, preserved for existing Clerk/Mux
+installations. It is not a requirement to create cloud accounts for the selected
+self-hosted beta.
 
 1. Install the pinned Bun version from package.json and Node 22. Clone this fork,
    check out the reviewed feature branch until it is merged, and run
@@ -66,6 +131,85 @@ do not switch a live paid customer deployment without reconciling its billing.
 8. Restore Monday connector access and read Assignments18416704806 to reconcile
    real fields and statuses before any import. Preserve Monday's records during
    evaluation; no import or destructive migration has been performed.
+
+## Same-day isolated beta — October 15
+
+Jacob requested an online beta for team evaluation by 3pm Central on October 15.
+This authorizes preparing an isolated, authenticated beta; it does not turn the
+synthetic port5297 preview into a deployable environment. Do not copy its admin
+key, identity chooser, fixture functions or loopback media provider into the beta.
+Keep existing Atrium processes and data separate. All original media must remain
+NAS-backed; lack of a verified NAS endpoint is not permission to substitute the
+mini PC disk or an unrelated cloud bucket.
+
+The beta needs actual services behind these responsibilities before end-to-end
+acceptance. Fixture services are not substitutes:
+
+| Responsibility       | Required setup                                                                           | Verification before inviting the team                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Convex               | Dedicated self-hosted backend or explicitly chosen cloud deployment                      | Protected operations deny anonymous users; the real signed-in owner creates a workspace against this exact schema/functions |
+| Authentication       | Dedicated closed Keycloak realm, or an explicitly chosen Clerk application               | Normal sign-in, sign-out, token refresh and stable actor identity; actual second-account role boundaries                    |
+| NAS S3 API           | Dedicated agency namespace, private object access, HEAD/ETag/Range and exact-origin CORS | Generated video/photo/audio exact bytes; restart/outage recovery and no silent local-disk fallback                          |
+| Deliverable playback | Explicit original-only configuration, or a dedicated Mux environment                     | Actual edit playback, revisions/current approval and exact original download through the chosen path                        |
+
+Do not place provider credentials in chat or browser build variables. Backend
+configuration is listed in `.env.convex.example`, including `MUX_SIGNING_KEY` and
+`MUX_PRIVATE_KEY`, which are required by the existing signed-token paths. The
+normal frontend uses public Convex/OIDC configuration in self-hosted mode, or
+Clerk's publishable key in Clerk mode. Clerk's server secret remains server-side. Provider variables must be set on the
+dedicated deployment before its functions are published. Check names and presence
+without printing their values. A successful build with inert keys proves source
+compatibility, not provider readiness.
+
+Clerk development instances can support an isolated test beta, but the provider
+explicitly describes them as unsuitable for production workloads and limits them
+to 100 users. Treat evaluation accounts/data accordingly; production activation
+and domain configuration remain distinct. Mux documents a no-credit-card
+development starting tier; do not enable a paid plan or unlimited spending to
+meet the deadline. Account sign-in, any required legal acceptance and actual
+provider credentials must be established by the authorized account owner.
+
+For the managed alternative, configure Clerk's **Invite-only** access mode before
+publishing the address. Merely sending invitations does not restrict open signup,
+and `LAWN_BILLING_MODE=internal` does not do so either. Jacob chooses the actual
+recipients; test both an invited account and an uninvited signup attempt without
+inventing teammate identities or widening access.
+
+There are two independent invitation systems. Atrium's Team members dialog
+creates only a Convex email-bound membership link; it sends no email and does not
+create a Clerk invitation. A new person cannot use that link alone to register
+when Clerk is Invite-only. Use this explicit managed-alternative onboarding sequence:
+
+1. The authorized Clerk application owner adds their own account through Clerk's
+   dashboard invitation or manual-user flow, completes normal sign-in, and creates
+   the agency workspace in Atrium.
+2. For each teammate Jacob chooses, the owner creates a Clerk application
+   invitation to the exact email. The teammate accepts that provider invitation
+   and completes their own account credentials; agents do not set passwords.
+3. In Atrium, the workspace owner/admin creates the matching email-bound Team
+   members link with Content team, CMO or Admin as intended and shares that link
+   with that person. The teammate opens it while signed in with that email and
+   accepts the workspace membership. Clerk registration alone grants no Atrium
+   workspace membership or review permission.
+4. Check the actual new account in a separate browser session: its role, access
+   to the intended workspace and forbidden operations. A separate uninvited
+   visitor must be unable to register. Revoking either type of invitation affects
+   that system only; an existing user or membership needs its own access review.
+
+This sequence is derived from the current application code and Clerk's documented
+invitation behavior. It still requires real end-to-end beta verification; the
+synthetic identity tests do not prove that the two systems work together.
+
+Final beta acceptance is the real normal route, not the preview: owner sign-in →
+client/count/due/pair assignment → member edit upload → director revision/replaced
+version approval → viewer download of that exact approved original. Also test raw
+source upload/preview/reuse, denied approval/raw access, outage recovery and a
+second browser session. Invite no arbitrary accounts; Jacob chooses teammates.
+
+References: [Convex–Clerk setup](https://docs.convex.dev/auth/clerk),
+[Clerk environment boundaries](https://clerk.com/docs/guides/development/managing-environments),
+[Clerk access modes](https://clerk.com/docs/guides/secure/restricting-access),
+[Mux account/API setup](https://www.mux.com/docs/core/ai-agents).
 
 ## Quality and promotion
 

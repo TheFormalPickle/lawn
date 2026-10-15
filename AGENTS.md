@@ -118,3 +118,13 @@ reuse the same receipt queue as the picker. Optional buttons remain accessible.
 Local drop targets must prevent duplicate global routing and clear drag feedback.
 Preserve review permissions, replacement approval invalidation and source/draft
 context while reducing steps. Check the real path, not just styling or callbacks.
+
+October15 13:51 Chicago update: Jacob explicitly authorized an online usable beta
+by15:00 today, with team testing over the weekend and production v1 still targeted
+October23. Prepare/deploy only an isolated reviewed beta; preserve existing Atrium,
+NAS/customer records and unrelated services. This supersedes the earlier planning-
+only/no-deploy restriction for that beta. It does not authorize paid commitments,
+public fixture/admin identities, weakened auth, arbitrary invitations or local-disk
+fallback for required NAS originals. Real service/account setup and safe access are
+prerequisites; report unmet gates plainly rather than exposing the synthetic sample.
+Jacob also explicitly encouraged subagents to meet the beta timeframe.

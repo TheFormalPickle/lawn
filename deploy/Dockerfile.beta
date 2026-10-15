@@ -1,0 +1,35 @@
+# Isolated office beta web process. Backend/auth/storage remain separately configured.
+FROM node:22-bookworm-slim
+RUN npm install --global bun@1.3.6
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY . .
+ARG VITE_CONVEX_URL
+ARG VITE_CONVEX_SITE_URL
+ARG VITE_AUTH_PROVIDER=clerk
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ARG VITE_OIDC_URL
+ARG VITE_OIDC_REALM
+ARG VITE_OIDC_CLIENT_ID
+RUN test -n "$VITE_CONVEX_URL" && \
+    case "$VITE_AUTH_PROVIDER" in \
+      clerk) test -n "$VITE_CLERK_PUBLISHABLE_KEY" ;; \
+      keycloak) test -n "$VITE_OIDC_URL" && test -n "$VITE_OIDC_REALM" && test -n "$VITE_OIDC_CLIENT_ID" ;; \
+      *) exit 1 ;; \
+    esac
+ENV VITE_CONVEX_URL=$VITE_CONVEX_URL \
+    VITE_CONVEX_SITE_URL=$VITE_CONVEX_SITE_URL \
+    VITE_AUTH_PROVIDER=$VITE_AUTH_PROVIDER \
+    VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY \
+    VITE_OIDC_URL=$VITE_OIDC_URL \
+    VITE_OIDC_REALM=$VITE_OIDC_REALM \
+    VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID
+RUN NODE_OPTIONS=--dns-result-order=ipv4first bun run build
+RUN mkdir -p /app/node_modules/.vite-temp && chown node:node /app/node_modules/.vite-temp
+ENV NODE_ENV=production
+# Add only the intended public beta hostname; retain Vite's rebinding protection.
+ENV __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=beta.atriumsuite.com
+USER node
+EXPOSE 5298
+CMD ["node", "node_modules/vite/bin/vite.js", "preview", "--host", "0.0.0.0", "--port", "5298", "--strictPort"]

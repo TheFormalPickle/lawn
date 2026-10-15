@@ -1,7 +1,7 @@
 import { Building2 } from "lucide-react";
 import { Brand } from "@/components/Brand";
 import { Link } from "@tanstack/react-router";
-import { UserButton } from "@clerk/tanstack-react-start";
+import { UserButton } from "@/lib/auth";
 import { ThemeToggleButton } from "@/components/theme/ThemeToggle";
 import React from "react";
 import { useConvex } from "convex/react";

@@ -18,6 +18,7 @@ import {
   createPublicPlaybackId,
   getMuxAsset,
 } from "./mux";
+import { mediaMode } from "./mediaPolicy";
 import { BUCKET_NAME, getS3Client } from "./s3";
 
 const GIBIBYTE = 1024 ** 3;
@@ -299,6 +300,8 @@ export const markUploadComplete = action({
         );
       }
 
+      if (!head.ETag?.trim())
+        throw new Error("Storage did not confirm the original file identity.");
       const metadataApplied = await ctx.runMutation(
         internal.videos.reconcileUploadedObjectMetadata,
         {
@@ -306,10 +309,30 @@ export const markUploadComplete = action({
           uploadId: video.s3Key,
           fileSize: contentLength,
           contentType: normalizedContentType,
+          storageETag: head.ETag,
         },
       );
 
       if (!metadataApplied) throw new Error("This upload was replaced.");
+      if (mediaMode() === "original") {
+        await ctx.runMutation(internal.videos.markOriginalReady, {
+          videoId: args.videoId,
+          uploadId: video.s3Key,
+        });
+        const current = await ctx.runQuery(api.videos.getVideoForPlayback, {
+          videoId: args.videoId,
+        });
+        if (
+          !current ||
+          current.s3Key !== video.s3Key ||
+          current.status !== "ready" ||
+          !current.originalOnly
+        )
+          throw new Error(
+            "This upload was replaced or could not be confirmed.",
+          );
+        return { success: true };
+      }
       const shouldIngest = await ctx.runMutation(
         internal.videos.markAsProcessing,
         {
@@ -454,6 +477,34 @@ export const getOriginalPlaybackUrl = action({
       throw new Error("Original bucket file not found for this video");
     }
 
+    if (video.s3ETag) {
+      const head = await getS3Client()
+        .send(
+          new HeadObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: normalizeBucketKey(video.s3Key),
+          }),
+        )
+        .catch(() => {
+          throw new Error(
+            "The original is unavailable. Restore storage and retry.",
+          );
+        });
+      if (
+        head.ETag !== video.s3ETag ||
+        head.ContentLength !== video.fileSize ||
+        normalizeContentType(head.ContentType) !==
+          normalizeContentType(video.contentType)
+      )
+        throw new Error(
+          "The original has changed. Restore the reviewed file or upload a new edit.",
+        );
+      const current = await ctx.runQuery(api.videos.getVideoForPlayback, {
+        videoId: args.videoId,
+      });
+      if (current?.s3Key !== video.s3Key || current?.s3ETag !== video.s3ETag)
+        throw new Error("This original was replaced. Reopen the current edit.");
+    }
     const contentType = video.contentType ?? "video/mp4";
     return {
       url: await buildSignedBucketObjectUrl(video.s3Key, {
@@ -544,7 +595,7 @@ export const getDownloadUrl = action({
 
     const filename = buildDownloadFilename(video.title, key);
 
-    if (args.approvedOnly) {
+    if (args.approvedOnly || video.s3ETag) {
       // Review approval is recorded evidence, not proof that the original is
       // currently reachable. Check on demand rather than polling every card.
       const head = await getS3Client()
@@ -560,6 +611,7 @@ export const getDownloadUrl = action({
           );
         });
       if (
+        (video.s3ETag && head.ETag !== video.s3ETag) ||
         typeof head.ContentLength !== "number" ||
         !Number.isFinite(head.ContentLength) ||
         head.ContentLength <= 0 ||
@@ -574,10 +626,19 @@ export const getDownloadUrl = action({
           "The approved original is unavailable or has changed. Retry after storage is restored.",
         );
       // Access/current-version approval may change during the storage read.
-      const current = await ctx.runQuery(api.contentItems.getReadyVideo, {
-        videoId: args.videoId,
-      });
-      if (current.s3Key !== video.s3Key)
+      const current = await ctx.runQuery(
+        args.approvedOnly
+          ? api.contentItems.getReadyVideo
+          : api.videos.getVideoForPlayback,
+        {
+          videoId: args.videoId,
+        },
+      );
+      if (
+        !current ||
+        current.s3Key !== video.s3Key ||
+        current.s3ETag !== video.s3ETag
+      )
         throw new Error(
           "This approved edit was replaced. Open the current deliverable.",
         );

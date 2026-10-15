@@ -27,13 +27,15 @@ export function CreateTeamDialog({
 }: CreateTeamDialogProps) {
   const [name, setName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const createTeam = useMutation(api.teams.create);
   const navigate = useNavigate({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || isLoading) return;
 
+    setError(null);
     setIsLoading(true);
     try {
       const createdTeam = await createTeam({ name: name.trim() });
@@ -42,13 +44,21 @@ export function CreateTeamDialog({
       navigate({ to: teamHomePath(createdTeam.slug) });
     } catch (error) {
       console.error("Failed to create team:", error);
+      setError(
+        "Workspace creation could not be confirmed. Your name is kept. Close this dialog and check your workspaces before trying again to avoid a duplicate.",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isLoading) onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
@@ -64,13 +74,20 @@ export function CreateTeamDialog({
               aria-label="Workspace name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={isLoading}
               autoFocus
             />
           </div>
+          {error && (
+            <p role="alert" className="mb-4 text-sm text-danger">
+              {error}
+            </p>
+          )}
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
+              disabled={isLoading}
               onClick={() => onOpenChange(false)}
             >
               Cancel

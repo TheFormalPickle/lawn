@@ -79,3 +79,14 @@ Current local built acceptance covers real saved synthetic bytes, replacement
 approval invalidation, uncertain confirmation retry and role denial at desktop and
 390px widths. It does not establish native OS drag behavior, real Clerk sign-in,
 live media providers or NAS persistence. Those still belong in launch rehearsal.
+
+## Accelerated beta — October15, 15:00 Chicago
+
+Jacob requested a usable online beta by3pm today at1:51pm, so the team can test it
+over the weekend before next week's production work. Freeze optional changes and
+prioritize actual sign-in, workspace/client/pair assignment, file upload/review,
+approved-original retrieval and recovery. This authorizes isolated beta deployment;
+it does not permit publishing the synthetic local preview as real team access.
+The October23 production target remains separate. Missing actual accounts, healthy
+NAS-backed originals or secure network access cannot be replaced by passing fixture
+tests. Preserve existing Atrium services and record the exact beta/rollback state.

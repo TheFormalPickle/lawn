@@ -62,16 +62,27 @@ export default defineSchema({
   }).index("by_team", ["teamId"]),
 
   productionTeams: defineTable({
-    teamId: v.id("teams"), name: v.string(),
-    directorClerkId: v.string(), producerClerkId: v.string(), updatedAt: v.number(),
+    teamId: v.id("teams"),
+    name: v.string(),
+    directorClerkId: v.string(),
+    producerClerkId: v.string(),
+    updatedAt: v.number(),
   }).index("by_team", ["teamId"]),
 
   contentBatches: defineTable({
-    teamId: v.id("teams"), projectId: v.id("projects"),
-    productionTeamId: v.id("productionTeams"), productionTeamName: v.string(),
-    quantity: v.number(), dueDate: v.string(), notes: v.string(),
-    createdByClerkId: v.string(), requestKey: v.string(), requestSignature: v.string(),
-  }).index("by_team", ["teamId"]).index("by_project", ["projectId"])
+    teamId: v.id("teams"),
+    projectId: v.id("projects"),
+    productionTeamId: v.id("productionTeams"),
+    productionTeamName: v.string(),
+    quantity: v.number(),
+    dueDate: v.string(),
+    notes: v.string(),
+    createdByClerkId: v.string(),
+    requestKey: v.string(),
+    requestSignature: v.string(),
+  })
+    .index("by_team", ["teamId"])
+    .index("by_project", ["projectId"])
     .index("by_creator_request", ["teamId", "createdByClerkId", "requestKey"]),
 
   contentItems: defineTable({
@@ -112,16 +123,29 @@ export default defineSchema({
     requestSignature: v.string(),
     storageKey: v.optional(v.string()),
     storageETag: v.optional(v.string()),
-    status: v.union(v.literal("uploading"), v.literal("ready"), v.literal("removed")),
-  }).index("by_team", ["teamId"])
+    status: v.union(
+      v.literal("uploading"),
+      v.literal("ready"),
+      v.literal("removed"),
+    ),
+  })
+    .index("by_team", ["teamId"])
     .index("by_project", ["projectId"])
     .index("by_team_status", ["teamId", "status"])
     .index("by_team_status_scope", ["teamId", "status", "projectId"])
-    .index("by_team_status_scope_kind", ["teamId", "status", "projectId", "kind"])
+    .index("by_team_status_scope_kind", [
+      "teamId",
+      "status",
+      "projectId",
+      "kind",
+    ])
     .index("by_team_status_kind", ["teamId", "status", "kind"])
     .index("by_team_status_uploader", ["teamId", "status", "uploadedByClerkId"])
     .index("by_creator_request", ["teamId", "uploadedByClerkId", "requestKey"])
-    .searchIndex("search_files", { searchField: "searchText", filterFields: ["teamId", "projectId", "kind", "status"] }),
+    .searchIndex("search_files", {
+      searchField: "searchText",
+      filterFields: ["teamId", "projectId", "kind", "status"],
+    }),
 
   videos: defineTable({
     projectId: v.id("projects"),
@@ -141,6 +165,8 @@ export default defineSchema({
     ),
     // Metadata
     s3Key: v.optional(v.string()),
+    s3ETag: v.optional(v.string()),
+    originalOnly: v.optional(v.boolean()),
     duration: v.optional(v.number()),
     thumbnailUrl: v.optional(v.string()),
     fileSize: v.optional(v.number()),
