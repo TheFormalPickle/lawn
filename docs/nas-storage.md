@@ -73,13 +73,28 @@ checking pool/dataset health, free capacity, access and backup configuration.
    originals. Confirm a sample restored assignment still reaches its source and
    current approved version. Preserve any existing production services throughout.
 
-## Current inspection boundary
+## October15 beta preparation evidence
 
-The Linux mini PC is verified over ordinary SSH and already hosts Atrium-related
-services. Its clock is unsynchronized; privileged access is needed for supervised
-host corrections. On October15 the user clarified TrueNAS had been off following a
-power event and had just been powered on. The old NAS address did not respond and
-the old mount was failed. Bounded LAN/mDNS/service discovery has not yet verified a
-TrueNAS identity or its current address. A discovered SMB host named THINKPAD was
-not identified as TrueNAS. No NAS data, pool, share, mount or service has been changed.
-A powered machine is not yet evidence that its storage is online or healthy.
+TrueNAS is now identified at192.168.0.103, version25.10.1-Goldeye. The actual
+Storage view reports Vault online, zero errors and35.48TiB free. This is current
+health evidence, not redundancy or restore proof: the displayed data vdevs each
+have one disk. No pool, existing dataset or customer file was reorganized.
+
+The mini PC's existing systemd automount was recovered using its existing root-owned
+SMB configuration without reading or exposing credentials. Actual mounted source
+is `//192.168.0.103/A`, CIFS at `/mnt/nas`. The isolated beta namespace is
+`/mnt/nas/atrium-beta-20261015`; no recursive import or relocation of existing
+agency material is enabled. The dedicated S3 service uses only its `objects`
+subdirectory, checks actual CIFS mount identity and a saved sentinel at startup,
+and refuses missing storage rather than creating a local directory.
+
+The beta arrangement uses a separately supervised S3-compatible service over this
+CIFS-backed directory. It is not a native ZFS object service or a verified
+independent backup. Public route, normal authenticated NAS media, restart and
+backup/restore acceptance must be recorded separately before claiming readiness.
+Native NAS service placement and recovery remain production work.
+
+The mini PC's clock was corrected through the host's time service; the measured
+UTC difference was about1.2seconds afterward. A persistent NTP service was not
+available, so future synchronization and monitoring remain an explicit gap.
+Existing Atrium services and databases remain separate from this beta.

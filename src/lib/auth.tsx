@@ -48,6 +48,7 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 let keycloak: Keycloak | undefined;
 let keycloakInitialization: Promise<boolean> | undefined;
+let keycloakReady = false;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -74,7 +75,7 @@ async function initializeKeycloak() {
           notify();
         });
       };
-      return keycloak.init({
+      const authenticated = await keycloak.init({
         onLoad: "check-sso",
         pkceMethod: "S256",
         flow: "standard",
@@ -82,15 +83,24 @@ async function initializeKeycloak() {
         silentCheckSsoFallback: false,
         scope: "openid profile email",
       });
+      keycloakReady = true;
+      notify();
+      return authenticated;
     })().catch((error) => {
       // A temporary discovery/network failure must not poison every later retry.
       keycloakInitialization = undefined;
       keycloak = undefined;
+      keycloakReady = false;
       throw error;
     });
   }
   await keycloakInitialization;
   return keycloak!;
+}
+
+// OAuth callback state/code must be consumed before the router normalizes the URL.
+export async function initializeBrowserAuth() {
+  if (mode === "keycloak") await initializeKeycloak();
 }
 
 function KeycloakStateProvider({ children }: { children: ReactNode }) {
@@ -102,7 +112,7 @@ function KeycloakStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     const update = () => {
-      if (active)
+      if (active && keycloakReady)
         setState({
           isLoaded: true,
           user: keycloak?.authenticated ? oidcUser(keycloak.tokenParsed) : null,
