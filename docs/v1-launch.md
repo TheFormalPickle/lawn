@@ -119,3 +119,19 @@ establish full media recovery, live restart or an atomic cross-service restore.
 Full NAS/offsite restore remains open.
 Use [beta-deployment.md](beta-deployment.md) for the current arrangement and its
 limitations; update the canonical checkpoint with final host proof.
+
+## October15 storage lifecycle candidate — not deployed
+
+Published `df4138b` preserves exact original-file removal receipts transactionally
+before video, project or workspace deletion and different-key replacement. It
+does not delete storage bytes or reclaim capacity. The public beta remains
+`69a1c22` with its existing NAS-backed workflow; the new candidate has not been
+deployed. Six focused cases and all66 local tests pass, with types, lint and normal
+build. An owned SQLite backend verifies saved receipts, original bytes and actual
+process-restart/export persistence; all temporary services and data were removed.
+See [storage-lifecycle.md](storage-lifecycle.md) for evidence and limits.
+
+Office SSH is currently unreachable from this Mac after leaving the LAN. Do not
+expose administrative access or restart live services to publish this increment.
+Continue isolated preparation; full media/offsite recovery, coordinated outage
+rehearsal, persistent time synchronization and safe byte cleanup remain separate.

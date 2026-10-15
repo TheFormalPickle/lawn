@@ -106,7 +106,6 @@ cross-database backup. A full NAS restore and offsite recovery have not
 been exercised. Do not describe metadata dumps or a healthy web response as that
 acceptance; final host evidence belongs in the launch checkpoint.
 
-
 ## October15 first-use follow-up
 
 The exact `69a1c22` backend and web image are online. Pending content-team
@@ -135,3 +134,19 @@ NAS service restart was needed. Previous `d11a5a1` and `acc3cab` web images rema
 for rollback. A backend rollback to code predating uncapped mode must restore its
 supported numeric configuration before loading that older policy; web-only
 rollback does not change backend data or configuration.
+
+## October15 storage lifecycle candidate — not deployed
+
+Published `df4138b` preserves exact original-file removal receipts transactionally
+before video, project or workspace deletion and different-key replacement. It
+does not delete storage bytes or reclaim capacity. The public beta remains
+`69a1c22` with its existing NAS-backed workflow; the new candidate has not been
+deployed. Six focused cases and all66 local tests pass, with types, lint and normal
+build. An owned SQLite backend verifies saved receipts, original bytes and actual
+process-restart/export persistence; all temporary services and data were removed.
+See [storage-lifecycle.md](storage-lifecycle.md) for evidence and limits.
+
+Office SSH is currently unreachable from this Mac after leaving the LAN. Do not
+expose administrative access or restart live services to publish this increment.
+Continue isolated preparation; full media/offsite recovery, coordinated outage
+rehearsal, persistent time synchronization and safe byte cleanup remain separate.
