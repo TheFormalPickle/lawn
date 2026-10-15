@@ -113,6 +113,9 @@ supervised recovery is the current boundary.
 Before unattended operation and October23 production acceptance, finish persistent
 time synchronization, retain the installed six-hour private app/auth metadata backup job and exercise
 full application/storage restart, restore and rollback. The first backup run
-and an isolated current auth-database restore pass; they are not full media recovery. Full NAS/offsite restore remains open.
+and isolated current auth/application metadata restores pass. The application
+restore re-export matches all 14 tables and 65 saved records exactly; it does not
+establish full media recovery, live restart or an atomic cross-service restore.
+Full NAS/offsite restore remains open.
 Use [beta-deployment.md](beta-deployment.md) for the current arrangement and its
 limitations; update the canonical checkpoint with final host proof.

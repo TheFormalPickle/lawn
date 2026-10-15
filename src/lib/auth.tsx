@@ -42,6 +42,7 @@ type AuthState = {
     forceRefreshToken: boolean;
   }) => Promise<string | null>;
   login: (returnPath?: string) => Promise<void>;
+  switchAccount: (returnPath: string) => Promise<void>;
   logout: () => Promise<void>;
   account: () => Promise<void>;
 };
@@ -161,12 +162,28 @@ function KeycloakStateProvider({ children }: { children: ReactNode }) {
     const client = await initializeKeycloak();
     await client.logout({ redirectUri: `${window.location.origin}/sign-in` });
   }, []);
+  const switchAccount = useCallback(async (returnPath: string) => {
+    const client = await initializeKeycloak();
+    // A normal login can immediately reuse the wrong account's SSO session.
+    // Explicit switching must show credentials while retaining the exact invite.
+    await client.login({
+      prompt: "login",
+      redirectUri: `${window.location.origin}${safeAuthReturnPath(returnPath)}`,
+    });
+  }, []);
   const account = useCallback(async () => {
     (await initializeKeycloak()).accountManagement();
   }, []);
   const value = useMemo(
-    () => ({ ...state, fetchAccessToken, login, logout, account }),
-    [state, fetchAccessToken, login, logout, account],
+    () => ({
+      ...state,
+      fetchAccessToken,
+      login,
+      switchAccount,
+      logout,
+      account,
+    }),
+    [state, fetchAccessToken, login, switchAccount, logout, account],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -214,6 +231,11 @@ function ClerkStateProvider({ children }: { children: ReactNode }) {
       },
       logout: async () => {
         await auth.signOut();
+      },
+      switchAccount: async (returnPath: string) => {
+        await auth.signOut({
+          redirectUrl: `/sign-in?redirect_url=${encodeURIComponent(safeAuthReturnPath(returnPath))}`,
+        });
       },
       account: async () => {},
     }),

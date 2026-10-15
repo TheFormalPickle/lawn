@@ -95,8 +95,12 @@ and was stopped. Verify continued clock accuracy before relying on unattended
 weekend operation. A dedicated six-hour app/auth metadata backup timer is enabled. Its first actual
 run passed official Convex ZIP CRC, Keycloak custom archive validation and SHA256
 checks with private0600 files/0700 directories. An isolated restore of the current
-auth database retains closed registration and the official subject scope. An
-application snapshot also contains the exact accepted workspace and file records.
+auth database retains closed registration and the official subject scope. The
+actual application snapshot was imported into a fresh pinned backend on a private
+Docker network, then re-exported with the official CLI. All 14 tables and 65 saved
+records match exactly. Its disposable container, volume and network were removed;
+live services were not restarted. The four exact generated acceptance originals
+were also removed after their workspace cleanup, with final object absence checked.
 These are metadata protections; they do not copy originals or provide an atomic
 cross-database backup. A full NAS restore and offsite recovery have not
 been exercised. Do not describe metadata dumps or a healthy web response as that

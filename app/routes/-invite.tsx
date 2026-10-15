@@ -1,10 +1,15 @@
-
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
-import { useUser } from "@/lib/auth";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/lib/auth";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, Users, Mail, Check } from "lucide-react";
@@ -15,13 +20,28 @@ export default function InvitePage() {
   const params = useParams({ strict: false });
   const navigate = useNavigate({});
   const token = params.token as string;
-  const { user, isLoaded } = useUser();
+  const { user, isLoaded, switchAccount } = useAuth();
 
   const { invite } = useInviteData({ token });
   const acceptInvite = useMutation(api.teams.acceptInvite);
 
   const [isAccepting, setIsAccepting] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleSwitchAccount = async () => {
+    if (isSwitching) return;
+    setIsSwitching(true);
+    setError(null);
+    try {
+      await switchAccount(`/invite/${encodeURIComponent(token)}`);
+    } catch {
+      setError(
+        "Unable to open account sign-in. Your invitation is kept. Try again.",
+      );
+      setIsSwitching(false);
+    }
+  };
 
   const handleAccept = async () => {
     setIsAccepting(true);
@@ -56,7 +76,8 @@ export default function InvitePage() {
             </div>
             <CardTitle>Invalid or expired invite</CardTitle>
             <CardDescription>
-              This invite link is no longer valid. Please ask for a new invitation.
+              This invite link is no longer valid. Please ask for a new
+              invitation.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -96,7 +117,18 @@ export default function InvitePage() {
             <p className="text-sm text-[#888] text-center">
               Sign in with the email address above to accept this invite.
             </p>
-            <a href={`/sign-in?redirect_url=${encodeURIComponent(`/invite/${token}`)}`} className="block">
+            {import.meta.env.VITE_AUTH_PROVIDER === "keycloak" && (
+              <p className="text-sm text-muted">
+                First time here? Your administrator provides your initial
+                sign-in details separately. You will choose your own password at
+                first sign-in, then return here to join the team. This workspace
+                link does not create a sign-in account.
+              </p>
+            )}
+            <a
+              href={`/sign-in?redirect_url=${encodeURIComponent(`/invite/${token}`)}`}
+              className="block"
+            >
               <Button className="w-full">Sign in to accept</Button>
             </a>
           </CardContent>
@@ -116,19 +148,30 @@ export default function InvitePage() {
             </div>
             <CardTitle>Different email address</CardTitle>
             <CardDescription>
-              This invite was sent to {invite.email}, but you&apos;re signed in as{" "}
-              {user.primaryEmailAddress?.emailAddress}.
+              This invite was sent to {invite.email}, but you&apos;re signed in
+              as {user.primaryEmailAddress?.emailAddress}.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-[#888] text-center">
-              Please sign in with the correct email address to accept this invite.
+              Please sign in with the correct email address to accept this
+              invite.
             </p>
-            <a href={`/sign-in?redirect_url=${encodeURIComponent(`/invite/${token}`)}`} className="block">
-              <Button className="w-full" variant="outline">
-                Sign in with different account
-              </Button>
-            </a>
+            {error && (
+              <p role="alert" className="text-sm text-danger">
+                {error}
+              </p>
+            )}
+            <Button
+              className="w-full"
+              variant="outline"
+              disabled={isSwitching}
+              onClick={() => void handleSwitchAccount()}
+            >
+              {isSwitching
+                ? "Opening account sign-in…"
+                : "Sign in with different account"}
+            </Button>
           </CardContent>
         </Card>
       </div>

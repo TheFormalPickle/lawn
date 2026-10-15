@@ -147,3 +147,11 @@ namespace; no local fallback. App/auth metadata backups are separate from origin
 and do not establish full/offsite media recovery. Team identity provisioning is
 admin-assisted, then exact-email app membership; no SMTP or automatic signup claim.
 See docs/beta-deployment.md and docs/v1-launch.md for current evidence and limits.
+
+Account invitations and sign-in identities are separate. Never enable unverified
+public signup or return passwords through Convex to bridge that gap. The restricted
+Node22/POSIX administrative tool and current manual process are documented in
+docs/account-onboarding.md. Preserve original private receipts, refuse ambiguous
+creation replay or deleted identity recreation, and never reset existing credentials
+to resend a workspace link. Explicit account switching must show sign-in again and
+retain the exact invitation; ordinary SSO login can reuse the wrong account.
