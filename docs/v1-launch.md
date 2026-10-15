@@ -1,7 +1,8 @@
 # V1 production target: Friday, October 23, 2026
 
 Jacob set this deadline on Thursday, October 15. This is the target date, not a
-claim that production acceptance or hosting setup is already complete.
+claim that production acceptance is complete. An isolated usable beta is now
+online at https://beta.atriumsuite.com; production remains a separate decision.
 
 ## Scope for the first release
 
@@ -46,13 +47,15 @@ Before production, record evidence for:
 
 1. **Deployment arrangement.** Office mini PC OS, resources, secure administrative
    access, service supervision, TLS and the intended use of atriumsuite.com. The
-   current app still needs Convex, Clerk, S3-compatible storage and Mux; hosting its
-   web process locally does not replace them. All media originals must live on
+   beta now runs dedicated self-hosted Convex and closed Keycloak sign-in,
+   NAS-backed S3-compatible originals and explicit original-only browser playback.
+   No Clerk, Convex cloud or Mux account is required for that selected mode. All media originals must live on
    TrueNAS; a NAS share is not an S3 endpoint. Inventory existing storage before
    organizing a dedicated managed area; see [nas-storage.md](nas-storage.md).
-   Read-only SSH now verifies Debian12 and available local capacity. Existing
-   services must be preserved; the observed unsynchronized clock needs correction
-   and verification during supervised host preparation.
+   SSH verifies Debian12 and available local capacity; existing services are
+   preserved. The clock was corrected and token checks pass, but persistent NTP
+   installation remains open. Package preparation requiring nine unrelated
+   upgrades was stopped rather than changing the host broadly.
 2. **Real accounts and roles.** Agency-controlled sign-in, intended membership,
    director approval and CMO raw-library denial. No arbitrary invitations.
 3. **Real media.** Upload generated video/photo/audio, decode the intended formats,
@@ -64,10 +67,9 @@ Before production, record evidence for:
 5. **Release control.** Reviewed fork PR, exact candidate checks, configuration
    without fixture code/secrets, supervised launch authority and a rollback plan.
 
-No DNS, NAS, existing Atrium services, paid services or production configuration
-have been changed by this plan. A deadline does not turn local fixture evidence
-into production readiness. Continue fixing verified v1 defects while deployment
-details are established.
+Authorized beta DNS/TLS and dedicated app/auth/storage services are now configured.
+Existing Atrium services and databases are preserved. A deadline does not turn beta
+acceptance into production readiness; retain the separate production gates above.
 
 ## Expected daily interactions
 
@@ -75,10 +77,12 @@ Edits can be dropped directly onto an assignment or its open details. The existi
 upload/processing/review state advances automatically; there is no Start work
 prerequisite. Raw-library drops retain the selected client scope and use the same
 recoverable queue as the file picker. Source previews return to the same assignment.
-Current local built acceptance covers real saved synthetic bytes, replacement
-approval invalidation, uncertain confirmation retry and role denial at desktop and
-390px widths. It does not establish native OS drag behavior, real Clerk sign-in,
-live media providers or NAS persistence. Those still belong in launch rehearsal.
+Current public-beta acceptance covers normal OIDC sign-in and stable roles, bulk
+assignment, actual browser drag upload, original playback, comment/rework/revised
+approval, exact CMO approved downloads with old versions excluded, raw PNG/WAV
+upload/decoded preview/download, raw reuse and CMO raw-read denial. Desktop and
+390px views were inspected. This does not establish native OS drag behavior,
+universal codec support, full NAS restore or offsite recovery.
 
 ## Accelerated beta — October15, 15:00 Chicago
 
@@ -90,3 +94,25 @@ it does not permit publishing the synthetic local preview as real team access.
 The October23 production target remains separate. Missing actual accounts, healthy
 NAS-backed originals or secure network access cannot be replaced by passing fixture
 tests. Preserve existing Atrium services and record the exact beta/rollback state.
+
+## October15 beta handoff
+
+The public `acc3cab` candidate passes the real authenticated assignment → upload →
+review/revision → approved-library journey. Auth tests also reject wrong-audience,
+corrupted, anonymous and naturally expired credentials, and actual retry restores
+access without false empty onboarding. Independent host/container mount records verify the dedicated NAS CIFS path,
+and all four transferred application objects match saved lengths/SHA256. Browser
+bytes alone were not used to infer physical storage.
+
+Team access is administrator-assisted: provision each chosen exact identity, have
+the person establish their own password, then share the app membership link with
+Content team, CMO or Admin permissions. App invitations do not create identity
+accounts. No arbitrary teammates are invited. SMTP delivery/reset is not configured;
+supervised recovery is the current boundary.
+
+Before unattended operation and October23 production acceptance, finish persistent
+time synchronization, retain the installed six-hour private app/auth metadata backup job and exercise
+full application/storage restart, restore and rollback. The first backup run
+and an isolated current auth-database restore pass; they are not full media recovery. Full NAS/offsite restore remains open.
+Use [beta-deployment.md](beta-deployment.md) for the current arrangement and its
+limitations; update the canonical checkpoint with final host proof.
