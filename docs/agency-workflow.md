@@ -262,3 +262,17 @@ confirmation-loss retry without another PUT, replacement approval gating, raw
 client ownership and source-return context. It does not claim manual native OS
 file dragging or real authentication/provider acceptance. See the interface ledger
 for the Atrium identity pass and nas-storage.md for the physical storage requirement.
+
+## Enter daily work directly
+
+A member with one workspace enters its Content tracker directly from `/dashboard`;
+a viewer/CMO starts in Ready to use using the existing role-based default. Multiple
+workspaces require an explicit choice. Manage workspaces remains available in the
+shared header; its validated `manage=workspaces` view and the existing team URL
+retain workspace/client administration. Explicit workspace creation stays mounted
+when its new membership arrives reactively, so setup finishes before navigation.
+The zero-workspace flow still creates one real workspace. No sign-in, membership,
+billing or media permission was changed. Actual compiled normal dashboard/layout/
+tracker routes, memory history and local API records pass for single/CMO/multiple/
+empty/explicit-management cases at1440/390. Clerk identity/avatar remain inert in
+that test, and native OS or production sign-in is not claimed.

@@ -1,3 +1,4 @@
+import { Building2 } from "lucide-react";
 import { Brand } from "@/components/Brand";
 import { Link } from "@tanstack/react-router";
 import { UserButton } from "@clerk/tanstack-react-start";
@@ -66,6 +67,17 @@ export function DashboardHeader({
 
       {/* User controls — pinned top-right */}
       <div className="row-start-1 col-start-2 sm:col-start-3 flex items-center gap-4 pl-4 border-l border-line h-8">
+        <Link
+          to="/dashboard"
+          // TanStack infers search as never with this project's legacy strictNullChecks=false.
+          // Dashboard validates this fixed value; keep the runtime navigation contract.
+          search={{ manage: "workspaces" } as never}
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-muted hover:bg-surface hover:text-foreground"
+          aria-label="Manage workspaces"
+          title="Manage workspaces"
+        >
+          <Building2 size={18} />
+        </Link>
         <ThemeToggleButton />
         <UserButton
           appearance={{

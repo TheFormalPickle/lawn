@@ -1,13 +1,29 @@
 import { useConvex } from "convex/react";
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  useNavigate,
+  Link,
+  Navigate,
+} from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Users, Plus, ArrowRight, Folder } from "lucide-react";
 import { CreateTeamDialog } from "@/components/teams/CreateTeamDialog";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { teamHomePath, teamSettingsPath, projectPath } from "@/lib/routes";
+import {
+  teamHomePath,
+  teamTrackerPath,
+  teamSettingsPath,
+  projectPath,
+} from "@/lib/routes";
 import { useRoutePrewarmIntent } from "@/lib/useRoutePrewarmIntent";
 import { prewarmProject } from "./-project.data";
 import { useDashboardIndexData } from "./-index.data";
@@ -15,6 +31,10 @@ import { Id } from "@convex/_generated/dataModel";
 import { DashboardHeader } from "@/components/DashboardHeader";
 
 export const Route = createFileRoute("/dashboard/")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    manage:
+      search.manage === "workspaces" ? ("workspaces" as const) : undefined,
+  }),
   component: DashboardPage,
 });
 
@@ -90,16 +110,38 @@ function DashboardProjectCard({
 
 export default function DashboardPage() {
   const { teams } = useDashboardIndexData();
+  const { manage } = Route.useSearch();
   const navigate = useNavigate({});
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [stayInManager, setStayInManager] = useState(false);
+  const openCreateWorkspace = () => {
+    // A reactive first-membership update may arrive before create returns.
+    // Keep this explicit setup action mounted until its own navigation completes.
+    setStayInManager(true);
+    setCreateDialogOpen(true);
+  };
 
   const isLoading = teams === undefined;
+
+  if (isLoading) {
+    return (
+      <p role="status" className="p-6 text-muted">
+        Loading workspaces…
+      </p>
+    );
+  }
+
+  // A single agency workspace should open daily work, not a management grid.
+  // The team URL remains an explicit administration/client-management destination.
+  if (teams?.length === 1 && manage !== "workspaces" && !stayInManager) {
+    return <Navigate to={teamTrackerPath(teams[0].slug)} replace />;
+  }
 
   // Empty state - no teams
   if (teams && teams.length === 0) {
     return (
       <div className="h-full flex flex-col">
-        <DashboardHeader paths={[{ label: "dashboard" }]} />
+        <DashboardHeader paths={[{ label: "Workspaces" }]} />
 
         <div className="flex-1 flex items-center justify-center p-8 animate-in fade-in duration-300">
           <Card className="max-w-sm w-full text-center">
@@ -107,18 +149,18 @@ export default function DashboardPage() {
               <div className="mx-auto w-12 h-12 bg-[#e8e8e0] flex items-center justify-center mb-2">
                 <Users className="h-6 w-6 text-[#888]" />
               </div>
-              <CardTitle className="text-lg">Create your first team</CardTitle>
+              <CardTitle className="text-lg">
+                Create your agency workspace
+              </CardTitle>
               <CardDescription>
-                Teams help you organize projects and collaborate on video reviews.
+                One workspace connects your clients, content teams, review and
+                shared library.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button
-                className="w-full"
-                onClick={() => setCreateDialogOpen(true)}
-              >
+              <Button className="w-full" onClick={openCreateWorkspace}>
                 <Plus className="mr-1.5 h-4 w-4" />
-                Create a team
+                Create workspace
               </Button>
             </CardContent>
           </Card>
@@ -134,10 +176,10 @@ export default function DashboardPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <DashboardHeader paths={[{ label: "dashboard" }]}>
-        <Button onClick={() => setCreateDialogOpen(true)}>
+      <DashboardHeader paths={[{ label: "Workspaces" }]}>
+        <Button onClick={openCreateWorkspace}>
           <Plus className="mr-1.5 h-4 w-4" />
-          New team
+          New workspace
         </Button>
       </DashboardHeader>
 
@@ -145,7 +187,7 @@ export default function DashboardPage() {
         <div
           className={cn(
             "transition-opacity duration-300",
-            isLoading ? "opacity-0" : "opacity-100"
+            isLoading ? "opacity-0" : "opacity-100",
           )}
         >
           {teams?.map((team) => {
@@ -154,7 +196,9 @@ export default function DashboardPage() {
               <div key={team._id} className="mb-12 last:mb-0">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
                   <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-black text-[#1a1a1a]">{team.name}</h2>
+                    <h2 className="text-xl font-black text-[#1a1a1a]">
+                      {team.name}
+                    </h2>
                     <Badge variant="secondary">
                       {formatTeamPlanLabel(
                         team.plan,
@@ -164,22 +208,27 @@ export default function DashboardPage() {
                       )}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <Button asChild>
+                      <Link to={teamTrackerPath(team.slug)}>
+                        Open content workspace
+                      </Link>
+                    </Button>
                     <Link
                       to={teamSettingsPath(team.slug)}
                       className="text-[#888] hover:text-[#1a1a1a] text-sm font-bold transition-colors"
                     >
-                      Billing
+                      {team.billingMode === "internal" ? "Settings" : "Billing"}
                     </Link>
                     <Link
                       to={teamHomePath(team.slug)}
                       className="text-[#888] hover:text-[#1a1a1a] text-sm font-bold flex items-center gap-1 transition-colors"
                     >
-                      Manage team <ArrowRight className="h-3.5 w-3.5" />
+                      Manage workspace <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
                   </div>
                 </div>
-                
+
                 {team.projects.length === 0 ? (
                   <Card className="max-w-sm text-center">
                     <CardHeader>
@@ -195,7 +244,9 @@ export default function DashboardPage() {
                       <Button
                         variant="outline"
                         className="w-full"
-                        onClick={() => navigate({ to: teamHomePath(team.slug) })}
+                        onClick={() =>
+                          navigate({ to: teamHomePath(team.slug) })
+                        }
                       >
                         Open team
                       </Button>
@@ -208,7 +259,9 @@ export default function DashboardPage() {
                         key={project._id}
                         teamSlug={team.slug}
                         project={project}
-                        onOpen={() => navigate({ to: projectPath(team.slug, project._id) })}
+                        onOpen={() =>
+                          navigate({ to: projectPath(team.slug, project._id) })
+                        }
                       />
                     ))}
                   </div>

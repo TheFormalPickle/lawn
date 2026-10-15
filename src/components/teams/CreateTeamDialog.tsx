@@ -21,7 +21,10 @@ interface CreateTeamDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateTeamDialog({ open, onOpenChange }: CreateTeamDialogProps) {
+export function CreateTeamDialog({
+  open,
+  onOpenChange,
+}: CreateTeamDialogProps) {
   const [name, setName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const createTeam = useMutation(api.teams.create);
@@ -49,14 +52,16 @@ export function CreateTeamDialog({ open, onOpenChange }: CreateTeamDialogProps) 
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create a new team</DialogTitle>
+            <DialogTitle>Create agency workspace</DialogTitle>
             <DialogDescription>
-              Teams let you collaborate on video projects with others.
+              Keep all clients, content teams, reviews and shared files in one
+              agency workspace.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Input
-              placeholder="Team name"
+              placeholder="Workspace name"
+              aria-label="Workspace name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
@@ -71,7 +76,7 @@ export function CreateTeamDialog({ open, onOpenChange }: CreateTeamDialogProps) 
               Cancel
             </Button>
             <Button type="submit" disabled={!name.trim() || isLoading}>
-              {isLoading ? "Creating..." : "Create team"}
+              {isLoading ? "Creating..." : "Create workspace"}
             </Button>
           </DialogFooter>
         </form>
