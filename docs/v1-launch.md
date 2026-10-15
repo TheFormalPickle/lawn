@@ -48,6 +48,9 @@ Before production, record evidence for:
    access, service supervision, TLS and the intended use of atriumsuite.com. The
    current app still needs Convex, Clerk, S3-compatible storage and Mux; hosting its
    web process locally does not replace them. A NAS share is not an S3 endpoint.
+   Read-only SSH now verifies Debian12 and available local capacity. Existing
+   services must be preserved; the observed unsynchronized clock needs correction
+   and verification during supervised host preparation.
 2. **Real accounts and roles.** Agency-controlled sign-in, intended membership,
    director approval and CMO raw-library denial. No arbitrary invitations.
 3. **Real media.** Upload generated video/photo/audio, decode the intended formats,

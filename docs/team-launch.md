@@ -88,8 +88,11 @@ References: [Convex hosting](https://docs.convex.dev/production/hosting/vercel),
 ## Office hosting direction — October15
 
 Jacob intends the new Lawn-based Atrium to run on an office mini PC connected to
-the same switch as the NAS, using atriumsuite.com. Its OS/capacity and intended
-storage/access arrangement have not been established here. This direction does
+the same switch as the NAS, using atriumsuite.com. Read-only SSH inspection on
+October15 verified Debian12/x86_64, a Ryzen7 5700U, about28GiB RAM and557GiB free
+local disk. It already runs nginx, Docker/PostgreSQL and Atrium-related services;
+prepare an isolated Lawn installation rather than replacing their configuration.
+The intended backend/auth/storage/access arrangement remains to be settled. This direction does
 not authorize deploying, changing DNS, moving the current Atrium, mounting the NAS
 or importing customer records. Preserve the original systems during evaluation.
 
@@ -105,3 +108,11 @@ it must never be exposed at atriumsuite.com or promoted as real sign-in. Product
 needs the normal authenticated application, protected secrets/storage, TLS, tested
 backup/recovery and real role/media acceptance. Those are a separate reviewed
 launch step, not claims made by the local library tests.
+
+The same inspection found the host clock roughly nine minutes behind the local
+reference, `System clock synchronized: no` and no NTP service listed. No clock or
+service changes were made. Correct and verify time synchronization as a supervised
+host-preparation step before real authentication or signed-media acceptance; do
+not compensate by weakening token/signature checks. Both rely on valid time:
+[Clerk verification](https://clerk.com/docs/reference/backend/verify-token) and
+[S3 signed URLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html).
