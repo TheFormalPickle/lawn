@@ -117,14 +117,15 @@ export default function TeamSettingsPage() {
   const plan = billing?.plan ?? normalizeTeamPlan(team.plan);
   const planConfig = BILLING_PLANS[plan];
   const hasActiveSubscription = billing?.hasActiveSubscription ?? false;
+  const internalDeployment = billing?.billingMode === "internal";
   const subscriptionStatus = billing?.subscriptionStatus ?? "not_subscribed";
   const isTrialing = subscriptionStatus === "trialing";
-  const hasPortalAccess = isOwner && Boolean(billing?.stripeCustomerId);
-  const currentPlanLabel = hasActiveSubscription ? planConfig.label : "Unpaid";
+  const hasPortalAccess = !internalDeployment && isOwner && Boolean(billing?.stripeCustomerId);
+  const currentPlanLabel = internalDeployment ? "Agency" : hasActiveSubscription ? planConfig.label : "Unpaid";
   const canDeleteTeam = isOwner && !hasActiveSubscription;
 
   const storageUsed = billing?.storageUsedBytes ?? 0;
-  const storageLimit = planConfig.storageLimitBytes;
+  const storageLimit = billing?.storageLimitBytes ?? planConfig.storageLimitBytes;
   const storagePct =
     storageLimit > 0 ? Math.min((storageUsed / storageLimit) * 100, 100) : 0;
 
@@ -294,7 +295,7 @@ export default function TeamSettingsPage() {
                 <span className="text-xl font-black text-[#1a1a1a]">
                   {currentPlanLabel}
                 </span>
-                {hasActiveSubscription ? (
+                {internalDeployment ? <Badge variant="success">Internal</Badge> : hasActiveSubscription ? (
                   <Badge variant={isTrialing ? "warning" : "success"}>
                     {isTrialing ? "Trialing" : "Active"}
                   </Badge>
@@ -302,7 +303,7 @@ export default function TeamSettingsPage() {
                   <Badge variant="warning">{subscriptionStatus}</Badge>
                 )}
               </div>
-              {isTrialing && typeof billing?.currentPeriodEnd === "number" && (
+              {!internalDeployment && isTrialing && typeof billing?.currentPeriodEnd === "number" && (
                 <p className="text-xs text-[#888] mt-2">
                   Trial ends {formatUtcDateFromUnixSeconds(billing.currentPeriodEnd)} UTC
                 </p>
@@ -340,6 +341,13 @@ export default function TeamSettingsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12">
             {/* Plans column */}
             <div className="lg:col-span-3">
+              {internalDeployment ? (
+                <div className="border-2 border-[#1a1a1a] p-5">
+                  <h2 className="font-bold">Agency workspace</h2>
+                  <p className="mt-3 text-sm text-[#888]">Your team can create projects and upload within its configured storage cap. Lawn subscription checkout is disabled on this installation. Hosting, storage and media processing costs are managed separately.</p>
+                  <p className="mt-3 text-sm">Team roles and review permissions still apply. The administrator controls the storage cap.</p>
+                </div>
+              ) : (<>
               <h2 className="text-[10px] uppercase tracking-[0.2em] font-bold text-[#888] mb-4">
                 Plans
               </h2>
@@ -428,6 +436,7 @@ export default function TeamSettingsPage() {
                   billing starts.
                 </p>
               )}
+              </>)}
             </div>
 
             {/* Members column */}

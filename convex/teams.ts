@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { getUser, identityAvatarUrl, identityEmail, identityName, requireUser, requireTeamAccess } from "./auth";
+import { deploymentBillingPolicy } from "./deploymentBilling";
 import { getTeamSubscriptionState } from "./billingHelpers";
 
 function normalizedEmail(value: string) {
@@ -85,7 +86,7 @@ export const list = query({
     const teams = await Promise.all(
       memberships.map(async (membership) => {
         const team = await ctx.db.get(membership.teamId);
-        return team ? { ...team, role: membership.role } : null;
+        return team ? { ...team, role: membership.role, billingMode: deploymentBillingPolicy().mode } : null;
       })
     );
 
@@ -128,7 +129,7 @@ export const listWithProjects = query({
           })
         );
           
-        return { ...team, role: membership.role, projects: projectsWithCounts };
+        return { ...team, role: membership.role, billingMode: deploymentBillingPolicy().mode, projects: projectsWithCounts };
       })
     );
 
@@ -421,6 +422,8 @@ export const deleteTeam = mutation({
       .collect();
 
     for (const project of projects) {
+      const assignments = await ctx.db.query("contentItems").withIndex("by_project", q => q.eq("projectId", project._id)).collect();
+      for (const item of assignments) await ctx.db.delete(item._id);
       const videos = await ctx.db
         .query("videos")
         .withIndex("by_project", (q) => q.eq("projectId", project._id))

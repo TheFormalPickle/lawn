@@ -32,7 +32,9 @@ function formatTeamPlanLabel(
   plan: string,
   billingStatus?: string,
   stripeSubscriptionId?: string,
+  billingMode?: string,
 ) {
+  if (billingMode === "internal") return "Agency";
   if (!stripeSubscriptionId && billingStatus !== "active") {
     return "Unpaid";
   }
@@ -158,6 +160,7 @@ export default function DashboardPage() {
                         team.plan,
                         team.billingStatus,
                         team.stripeSubscriptionId,
+                        team.billingMode,
                       )}
                     </Badge>
                   </div>

@@ -55,3 +55,13 @@ Business assignments do not grant team membership or administrative access.
   board is the intended reference; don't invent its fields when access is unavailable.
 
 Design guidance: `docs/philosophy.md` is authoritative for the retained visual language.
+
+## Approved internal deployment mode
+
+Jacob approved private agency mode on October 15, 2026. The server-only
+`LAWN_BILLING_MODE=internal` enables workspace use without SaaS checkout and retains
+roles, review gates and `LAWN_INTERNAL_STORAGE_GB` (100 GiB per team by default).
+Subscription remains the default. This approval changes local product/configuration
+behavior; it does not authorize spending, new subscriptions, arbitrary invitations,
+production deployment or modification of Atrium. Do not present internal mode as a
+network/privacy boundary or a physical bucket quota. See docs/team-launch.md.

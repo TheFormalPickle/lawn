@@ -14,6 +14,7 @@ import type * as billingHelpers from "../billingHelpers.js";
 import type * as comments from "../comments.js";
 import type * as contentItems from "../contentItems.js";
 import type * as contentWorkflow from "../contentWorkflow.js";
+import type * as deploymentBilling from "../deploymentBilling.js";
 import type * as http from "../http.js";
 import type * as mux from "../mux.js";
 import type * as muxActions from "../muxActions.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   comments: typeof comments;
   contentItems: typeof contentItems;
   contentWorkflow: typeof contentWorkflow;
+  deploymentBilling: typeof deploymentBilling;
   http: typeof http;
   mux: typeof mux;
   muxActions: typeof muxActions;

@@ -51,7 +51,7 @@ They must never be deployed or copied into production.
 
 ## Verification and remaining acceptance
 
-The regression suite passes 20 tests across four files. It exercises Convex
+The regression suite passes 22 tests across five files. It exercises Convex
 handlers against an in-memory test backend: roles, cross-team/project linking,
 create replay identity, current-version approval, stale edits, deletion cleanup,
 existing-video compatibility and same-ID original-file replacement.
@@ -68,8 +68,8 @@ This uses actual saved local Convex records, real browser uploads, the existing
 player and signed synthetic ready webhooks. Authentication supplies synthetic
 local identities; object storage and Mux endpoints are owned loopback fixtures.
 It does not verify real Clerk accounts, live provider processing, deployment,
-large imported boards or production billing/subscription setup. Upstream quota
-and subscription gates remain in place; local fixtures supply inert subscriptions.
+large imported boards or production billing/subscription setup. Quota and role gates remain in place. The original sample uses inert subscriptions;
+a separate fresh-team acceptance uses the approved internal mode with no subscription.
 Type checking, lint and a configured production build are checked separately.
 
 Before team adoption: restore Monday read access and reconcile the real fields;
@@ -100,3 +100,26 @@ invalid signatures, exact replacement download bytes and both before/after-commi
 lost confirmation boundaries through the actual uploader and progress component.
 The full assignment/review/CMO journey was rerun after these changes. Local
 synthetic identities/media remain distinct from real Clerk and live providers.
+
+## Private agency mode
+
+Jacob approved server-configured internal mode for the new agency installation.
+A fresh saved team now creates its first project, assigns work and completes
+upload/review/download without a fake Stripe customer or subscription. Checkout
+and portal actions reject internal mode before provider calls. Existing role and
+recorded-byte storage guards remain enforced. Settings show Agency/Internal and
+the actual configured cap instead of Unpaid or trial offers. Team deletion also
+removes the new assignment records. Default subscription behavior is retained.
+See [the first-install checklist](team-launch.md); no cloud accounts, paid services
+or production deployment have been created. The exact hosted Clerk sign-in and
+real media integrations remain unverified.
+
+## Workload assignment clarification
+
+The Head CMO assigns a client, deliverable count, deadline and a director/producer
+team; they should not create each ad slot. Directors plan the ads, producers mostly
+edit, and both film. Approved deliverables go to CMOs. The initial one-at-a-time
+assignment form is a verified local foundation, not the final workload intake.
+Client workload generation and content-team planning are the next implementation.
+Raw assets and approved deliverables need distinct browsing paths; no Atrium data
+or services are being connected during this adaptation.

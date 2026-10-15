@@ -5,7 +5,7 @@
 Install dependencies:
 
 ```bash
-bun install
+bun install --frozen-lockfile
 ```
 
 Run app + Convex locally:
@@ -78,3 +78,6 @@ are browser configuration; never put a secret in a `VITE_` variable. No `.env`
 files, local admin keys, customer assets or preview fixture data belong in Git.
 The development web server binds port5296. Use a separate owned local/dev backend;
 do not reuse a production deploy key.
+
+For a new agency deployment, follow [the first-install checklist](team-launch.md).
+Keep web and Convex configuration separate; never copy the local sample credentials.

@@ -184,8 +184,9 @@ export default function TeamPage() {
   };
 
   const canManageMembers = team?.role === "owner" || team?.role === "admin";
-  const hasActiveSubscription = billing?.hasActiveSubscription ?? false;
-  const canCreateProject = team?.role !== "viewer" && hasActiveSubscription;
+  const canUseWorkspace = billing?.canUseWorkspace ?? false;
+  const internalDeployment = billing?.billingMode === "internal";
+  const canCreateProject = team?.role !== "viewer" && canUseWorkspace;
   const canAccessBilling = team?.role === "owner";
   const billingPath = team ? teamSettingsPath(team.slug) : null;
 
@@ -200,7 +201,7 @@ export default function TeamPage() {
             onClick={() => navigate({ to: billingPath ?? teamSettingsPath(team.slug) })}
           >
             <CreditCard className="sm:mr-1.5 h-4 w-4" />
-            <span className="hidden sm:inline">Billing</span>
+            <span className="hidden sm:inline">{internalDeployment ? "Settings" : "Billing"}</span>
           </Button>
         )}
         {canManageMembers && (
@@ -222,7 +223,7 @@ export default function TeamPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
-        {!isLoadingData && !hasActiveSubscription && canAccessBilling && (
+        {!isLoadingData && !canUseWorkspace && canAccessBilling && (
           <Card className="mb-6 border-[#1a1a1a]">
             <CardHeader>
               <CardTitle>Set up billing to create projects</CardTitle>
@@ -253,7 +254,7 @@ export default function TeamPage() {
                 </div>
                 <CardTitle className="text-lg">No projects yet</CardTitle>
                 <CardDescription>
-                  {hasActiveSubscription
+                  {canUseWorkspace
                     ? "Create your first project to start uploading videos."
                     : "Activate billing first, then create your first project."}
                 </CardDescription>

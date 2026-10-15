@@ -1,5 +1,6 @@
 import { StripeSubscriptions } from "@convex-dev/stripe";
 import { v } from "convex/values";
+import { deploymentBillingPolicy } from "./deploymentBilling";
 import Stripe from "stripe";
 import { api, components, internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
@@ -12,7 +13,6 @@ import {
   normalizeStoredTeamPlan,
   resolvePlanFromStripePriceId,
   TEAM_PLAN_MONTHLY_PRICE_USD,
-  TEAM_PLAN_STORAGE_LIMIT_BYTES,
 } from "./billingHelpers";
 
 const stripeClient = new StripeSubscriptions(components.stripe, {});
@@ -50,6 +50,9 @@ export const createSubscriptionCheckout = action({
     if (team.role !== "owner") {
       throw new Error("Only team owners can manage billing.");
     }
+
+    if (deploymentBillingPolicy().mode === "internal")
+      throw new Error("Subscription checkout and billing portals are disabled for this internal agency deployment.");
 
     const existingSubscription = await ctx.runQuery(
       components.stripe.public.getSubscriptionByOrgId,
@@ -144,6 +147,9 @@ export const createCustomerPortalSession = action({
       throw new Error("Only team owners can manage billing.");
     }
 
+    if (deploymentBillingPolicy().mode === "internal")
+      throw new Error("Subscription checkout and billing portals are disabled for this internal agency deployment.");
+
     const existingSubscription = await ctx.runQuery(
       components.stripe.public.getSubscriptionByOrgId,
       { orgId: args.teamId },
@@ -169,6 +175,8 @@ export const getTeamBilling = query({
   },
   returns: v.object({
     plan: teamPlanValidator,
+    billingMode: v.union(v.literal("internal"), v.literal("subscription")),
+    canUseWorkspace: v.boolean(),
     monthlyPriceUsd: v.number(),
     storageLimitBytes: v.number(),
     storageUsedBytes: v.number(),
@@ -189,8 +197,10 @@ export const getTeamBilling = query({
 
     return {
       plan: subscriptionState.plan,
-      monthlyPriceUsd: TEAM_PLAN_MONTHLY_PRICE_USD[subscriptionState.plan],
-      storageLimitBytes: TEAM_PLAN_STORAGE_LIMIT_BYTES[subscriptionState.plan],
+      billingMode: subscriptionState.billingMode,
+      canUseWorkspace: subscriptionState.canUseWorkspace,
+      monthlyPriceUsd: subscriptionState.billingMode === "internal" ? 0 : TEAM_PLAN_MONTHLY_PRICE_USD[subscriptionState.plan],
+      storageLimitBytes: subscriptionState.storageLimitBytes,
       storageUsedBytes,
       hasActiveSubscription: subscriptionState.hasActiveSubscription,
       subscriptionStatus:
@@ -206,7 +216,7 @@ export const getTeamBilling = query({
       stripePriceId: subscription?.priceId ?? subscriptionState.team.stripePriceId ?? null,
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
       role: membership.role,
-      canManageBilling: membership.role === "owner",
+      canManageBilling: membership.role === "owner" && subscriptionState.billingMode === "subscription",
     };
   },
 });

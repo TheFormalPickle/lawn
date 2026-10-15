@@ -1,3 +1,4 @@
+import { deploymentBillingPolicy } from "./deploymentBilling";
 import { components } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx } from "./_generated/server";
@@ -81,7 +82,11 @@ export async function getTeamSubscriptionState(
     subscription?.status,
   );
 
-  return { team, subscription, plan, hasActiveSubscription };
+  const policy = deploymentBillingPolicy();
+  return { team, subscription, plan, hasActiveSubscription, billingMode: policy.mode,
+    canUseWorkspace: policy.mode === "internal" || hasActiveSubscription,
+    storageLimitBytes: policy.storageLimitBytes ?? TEAM_PLAN_STORAGE_LIMIT_BYTES[plan],
+  };
 }
 
 export async function getTeamStorageUsedBytes(
@@ -115,12 +120,12 @@ export async function getTeamStorageUsedBytes(
   return total;
 }
 
-export async function assertTeamHasActiveSubscription(
+export async function assertTeamCanUseWorkspace(
   ctx: BillingCtx,
   teamId: Id<"teams">,
 ) {
   const state = await getTeamSubscriptionState(ctx, teamId);
-  if (!state.hasActiveSubscription) {
+  if (!state.canUseWorkspace) {
     throw new Error("An active Basic or Pro subscription is required.");
   }
   return state;
@@ -131,14 +136,14 @@ export async function assertTeamCanStoreBytes(
   teamId: Id<"teams">,
   incomingBytes: number,
 ) {
-  const state = await assertTeamHasActiveSubscription(ctx, teamId);
+  const state = await assertTeamCanUseWorkspace(ctx, teamId);
   const storageUsedBytes = await getTeamStorageUsedBytes(ctx, teamId);
-  const storageLimitBytes = TEAM_PLAN_STORAGE_LIMIT_BYTES[state.plan];
+  const storageLimitBytes = state.storageLimitBytes;
   const requestedBytes = Number.isFinite(incomingBytes) ? Math.max(0, incomingBytes) : 0;
 
   if (storageUsedBytes + requestedBytes > storageLimitBytes) {
     throw new Error(
-      `Storage limit reached for the ${state.plan} plan. Upgrade to continue uploading.`,
+      state.billingMode === "internal" ? "Team storage limit reached. Ask the administrator to review storage before uploading." : `Storage limit reached for the ${state.plan} plan. Upgrade to continue uploading.`,
     );
   }
 
