@@ -1,6 +1,6 @@
 # Isolated office beta
 
-The isolated beta is online at https://beta.atriumsuite.com as of October 15, 2026. The deployed application candidate is `acc3cab`, with dedicated self-hosted
+The isolated beta is online at https://beta.atriumsuite.com as of October 15, 2026. The deployed application candidate is `69a1c22`, with dedicated self-hosted
 Convex, Keycloak and NAS-backed S3-compatible originals. It uses the normal Linux
 Docker build, not localhost5297 or its ignored sample. The web container's loopback
 port is5298. Existing Atrium services and databases remain separate. This is a
@@ -105,3 +105,33 @@ These are metadata protections; they do not copy originals or provide an atomic
 cross-database backup. A full NAS restore and offsite recovery have not
 been exercised. Do not describe metadata dumps or a healthy web response as that
 acceptance; final host evidence belongs in the launch checkpoint.
+
+
+## October15 first-use follow-up
+
+The exact `69a1c22` backend and web image are online. Pending content-team
+invitees can be selected for director/producer pairs and receive workloads before
+joining. Real invitation acceptance atomically binds the pair and saved slots to
+the exact signed subject. No access is granted merely by assigning an email.
+Actual public acceptance saved a pending pair and two slots, checked wrong-account
+access denial, accepted both intended people and verified their resulting planning
+and editing permissions. The six real teammate accounts and their invitations
+were not changed by these synthetic checks.
+
+The backend setting is explicitly `LAWN_INTERNAL_STORAGE_GB=unlimited`. Billing
+returns a null application cap; Settings retains recorded upload usage and says
+No application cap. A101GiB metadata reservation exceeded the old allowance and
+was removed; no huge media transfer was performed. A separate small PNG upload,
+decoded preview and exact-byte retrieval passed. NAS capacity is not synthesized
+from this accounting. Authenticated account switching now explicitly signs out
+and returns through sign-in to the same invitation; the new username field is
+editable without the provider's obscure Restart login step. Actual public
+acceptance of this path passed with owned identities.
+
+The new immutable web image retains all95 prior hashed public JS/CSS assets,
+verified byte-for-byte, so open browsers can load their existing route chunks.
+Refresh once to load the new selectors and storage wording. No authentication or
+NAS service restart was needed. Previous `d11a5a1` and `acc3cab` web images remain
+for rollback. A backend rollback to code predating uncapped mode must restore its
+supported numeric configuration before loading that older policy; web-only
+rollback does not change backend data or configuration.

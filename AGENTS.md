@@ -134,7 +134,7 @@ Jacob also explicitly encouraged subagents to meet the beta timeframe.
 
 ## Current self-hosted beta
 
-October15 beta candidate acc3cab is deployed at beta.atriumsuite.com. Existing
+October15 beta candidate69a1c22 is deployed at beta.atriumsuite.com. Existing
 Atrium services remain separate. Private Keycloak sign-in uses PKCE S256 and the
 official basic default scope for immutable sub. Backend resource-token validation
 requires exact issuer, HTTPS JWKS, RS256 and API audience; never remove checks to
