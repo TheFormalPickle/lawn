@@ -10,7 +10,7 @@ export default defineSchema({
       v.literal("basic"),
       v.literal("pro"),
       v.literal("free"),
-      v.literal("team")
+      v.literal("team"),
     ),
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
@@ -32,7 +32,7 @@ export default defineSchema({
       v.literal("owner"),
       v.literal("admin"),
       v.literal("member"),
-      v.literal("viewer")
+      v.literal("viewer"),
     ),
   })
     .index("by_team", ["teamId"])
@@ -43,11 +43,7 @@ export default defineSchema({
   teamInvites: defineTable({
     teamId: v.id("teams"),
     email: v.string(),
-    role: v.union(
-      v.literal("admin"),
-      v.literal("member"),
-      v.literal("viewer")
-    ),
+    role: v.union(v.literal("admin"), v.literal("member"), v.literal("viewer")),
     invitedByClerkId: v.string(),
     invitedByName: v.string(),
     token: v.string(),
@@ -63,8 +59,29 @@ export default defineSchema({
     description: v.optional(v.string()),
   }).index("by_team", ["teamId"]),
 
+  contentItems: defineTable({
+    teamId: v.id("teams"),
+    projectId: v.id("projects"),
+    title: v.string(),
+    brief: v.string(),
+    producerClerkId: v.optional(v.string()),
+    directorClerkId: v.optional(v.string()),
+    cmoClerkId: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+    productionStatus: v.union(v.literal("planned"), v.literal("in_progress")),
+    currentVideoId: v.optional(v.id("videos")),
+    createdByClerkId: v.string(),
+    requestKey: v.string(),
+    requestSignature: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_team", ["teamId"])
+    .index("by_project", ["projectId"])
+    .index("by_creator_request", ["teamId", "createdByClerkId", "requestKey"]),
+
   videos: defineTable({
     projectId: v.id("projects"),
+    contentItemId: v.optional(v.id("contentItems")),
     uploadedByClerkId: v.string(),
     uploaderName: v.string(),
     title: v.string(),
@@ -76,11 +93,7 @@ export default defineSchema({
     muxAssetId: v.optional(v.string()),
     muxPlaybackId: v.optional(v.string()),
     muxAssetStatus: v.optional(
-      v.union(
-        v.literal("preparing"),
-        v.literal("ready"),
-        v.literal("errored")
-      )
+      v.union(v.literal("preparing"), v.literal("ready"), v.literal("errored")),
     ),
     // Metadata
     s3Key: v.optional(v.string()),
@@ -93,7 +106,7 @@ export default defineSchema({
       v.literal("uploading"),
       v.literal("processing"),
       v.literal("ready"),
-      v.literal("failed")
+      v.literal("failed"),
     ),
     workflowStatus: v.union(
       v.literal("review"),

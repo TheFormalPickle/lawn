@@ -150,9 +150,9 @@ async function requireVideoMemberAccess(
   videoId: Id<"videos">
 ) {
   const video = (await ctx.runQuery(api.videos.get, { videoId })) as
-    | { role?: string }
+    | { role?: string; canUpload?: boolean }
     | null;
-  if (!video || video.role === "viewer") {
+  if (!video || video.role === "viewer" || video.canUpload === false) {
     throw new Error("Requires member role or higher");
   }
 }
@@ -488,13 +488,13 @@ export const getSharedPlaybackSession = action({
 });
 
 export const getDownloadUrl = action({
-  args: { videoId: v.id("videos") },
+  args: { videoId: v.id("videos"), approvedOnly: v.optional(v.boolean()) },
   returns: v.object({
     url: v.string(),
     filename: v.string(),
   }),
   handler: async (ctx, args): Promise<{ url: string; filename: string }> => {
-    const video = await ctx.runQuery(api.videos.getVideoForPlayback, {
+    const video = await ctx.runQuery(args.approvedOnly ? api.contentItems.getReadyVideo : api.videos.getVideoForPlayback, {
       videoId: args.videoId,
     });
 

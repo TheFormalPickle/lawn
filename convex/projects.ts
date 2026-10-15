@@ -162,6 +162,8 @@ export const remove = mutation({
       await ctx.db.delete(video._id);
     }
 
+    const assignments = await ctx.db.query("contentItems").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect();
+    for (const assignment of assignments) await ctx.db.delete(assignment._id);
     await ctx.db.delete(args.projectId);
   },
 });

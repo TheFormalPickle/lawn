@@ -16,7 +16,8 @@ import {
 } from "./billingHelpers";
 
 const stripeClient = new StripeSubscriptions(components.stripe, {});
-const stripe = new Stripe(stripeClient.apiKey);
+// Defer billing credentials until checkout; review and tracker queries can load independently.
+const getStripe = () => new Stripe(stripeClient.apiKey);
 const TEAM_TRIAL_DAYS = 7;
 
 const teamPlanValidator = v.union(v.literal("basic"), v.literal("pro"));
@@ -116,7 +117,7 @@ export const createSubscriptionCheckout = action({
       sessionParams.customer = stripeCustomerId;
     }
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    const session = await getStripe().checkout.sessions.create(sessionParams);
     return {
       sessionId: session.id,
       url: session.url,

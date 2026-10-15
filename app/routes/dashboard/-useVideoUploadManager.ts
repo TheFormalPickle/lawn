@@ -32,7 +32,8 @@ export function useVideoUploadManager() {
   const [uploads, setUploads] = useState<ManagedUploadItem[]>([]);
 
   const uploadFilesToProject = useCallback(
-    async (projectId: Id<"projects">, files: File[]) => {
+    async (projectId: Id<"projects">, files: File[], contentItemId?: Id<"contentItems">) => {
+      if (contentItemId && files.length !== 1) throw new Error("Upload one edit per assignment at a time.");
       for (const file of files) {
         const uploadId = createUploadId();
         const title = file.name.replace(/\.[^/.]+$/, "");
@@ -55,6 +56,7 @@ export function useVideoUploadManager() {
         try {
           createdVideoId = await createVideo({
             projectId,
+            contentItemId,
             title,
             fileSize: file.size,
             contentType: file.type || "video/mp4",

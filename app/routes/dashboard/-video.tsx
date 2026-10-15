@@ -330,7 +330,7 @@ export default function VideoPage() {
           <VideoWorkflowStatusControl
             status={video.workflowStatus}
             size="lg"
-            disabled={!canEdit}
+            disabled={!video.canReview || video.status !== "ready"}
             onChange={(workflowStatus) => {
               void handleUpdateWorkflowStatus(workflowStatus);
             }}
@@ -356,7 +356,7 @@ export default function VideoPage() {
           <VideoWorkflowStatusControl
             status={video.workflowStatus}
             size="lg"
-            disabled={!canEdit}
+            disabled={!video.canReview || video.status !== "ready"}
             onChange={(workflowStatus) => {
               void handleUpdateWorkflowStatus(workflowStatus);
             }}

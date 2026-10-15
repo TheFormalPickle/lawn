@@ -193,6 +193,7 @@ export default function TeamPage() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <DashboardHeader paths={[{ label: team?.slug ?? "team" }]}>
+        {team && <Button variant="outline" onClick={() => navigate({ to: `/dashboard/${team.slug}/tracker` })}>Content tracker</Button>}
         {canAccessBilling && team && (
           <Button
             variant="outline"

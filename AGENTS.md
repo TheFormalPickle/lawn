@@ -29,3 +29,29 @@ We should not compromise on simplicity and good ux. We want to be pleasant to us
 ### 4. Security
 
 We want to make things convenient, but we don't want to be insecure. Be thoughtful about how things are implemented. Check team status and user status before committing changes. Be VERY thoughtful about endpoints exposed "publicly". Use auth and auth checks where they make sense to.
+
+## Agency content workflow
+
+This fork combines assignments, review and the finished-content library for the
+agency. Keep changes small and retain Lawn's existing design and fast route loaders.
+The head of CMOs uses an owner/admin account to assign a producer, director/reviewer,
+CMO and deadline. Members produce assigned work; the assigned director or an admin
+reviews tracked edits. CMOs can use viewer access to retrieve approved content.
+Business assignments do not grant team membership or administrative access.
+
+- `contentItems` tracks briefs and production before uploads exist. Its current
+  video supplies review/rework/done status; do not maintain a second approval flag.
+- Only the current playable approved version belongs in Ready to use. Uploading,
+  failed, processing, rework and replaced versions are not approved deliverables.
+- Preserve existing untracked videos, share links, comments and download behavior.
+  Enforce new workflow permissions on the server as well as in the interface.
+- Use a feature branch against this fork (`TheFormalPickle/lawn`), not upstream.
+  Keep the upstream MIT license and attribution. No production deployments, real
+  customer imports, billing changes or invitations without specific authorization.
+- Verify `bun run test`, `bun run typecheck`, `bun run lint` and `bun run build`.
+  Builds require the documented Convex/Clerk environment. Use owned synthetic local
+  data and distinguish test doubles, local backend, actual media and live providers.
+- Current scope and acceptance live in `docs/agency-workflow.md`. Monday's Assignments
+  board is the intended reference; don't invent its fields when access is unavailable.
+
+Design guidance: `docs/philosophy.md` is authoritative for the retained visual language.

@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { UploadStatus } from "@/components/upload/UploadProgress";
 
 export type DashboardUploadContextValue = {
-  requestUpload: (files: File[], preferredProjectId?: Id<"projects">) => void;
+  requestUpload: (files: File[], preferredProjectId?: Id<"projects">, contentItemId?: Id<"contentItems">) => void;
   uploads: {
     id: string;
     projectId: Id<"projects">;

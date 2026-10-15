@@ -1,15 +1,13 @@
 
 import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { DropZone } from "@/components/upload/DropZone";
-import { UploadProgress } from "@/components/upload/UploadProgress";
 import { UploadButton } from "@/components/upload/UploadButton";
 import { formatDuration, formatRelativeTime } from "@/lib/utils";
 import { triggerDownload } from "@/lib/download";
 import {
-  ArrowLeft,
   Play,
   MoreVertical,
   Trash2,
@@ -136,7 +134,7 @@ export default function ProjectPage({
     api.videoPresence.listProjectOnlineCounts,
     resolvedProjectId ? { projectId: resolvedProjectId } : "skip",
   );
-  const { requestUpload, uploads } =
+  const { requestUpload } =
     useDashboardUploadContext();
   const deleteVideo = useMutation(api.videos.remove);
   const updateVideoWorkflowStatus = useMutation(api.videos.updateWorkflowStatus);
@@ -446,7 +444,7 @@ export default function ProjectPage({
                       <VideoWorkflowStatusControl
                         status={video.workflowStatus}
                         stopPropagation
-                        disabled={!canUpload}
+                        disabled={!video.canReview || video.status !== "ready"}
                         onChange={(workflowStatus) =>
                           void handleUpdateWorkflowStatus(video._id, workflowStatus)
                         }
@@ -539,7 +537,7 @@ export default function ProjectPage({
                     <VideoWorkflowStatusControl
                       status={video.workflowStatus}
                       stopPropagation
-                      disabled={!canUpload}
+                      disabled={!video.canReview || video.status !== "ready"}
                       onChange={(workflowStatus) =>
                         void handleUpdateWorkflowStatus(video._id, workflowStatus)
                       }
