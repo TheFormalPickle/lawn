@@ -11,6 +11,7 @@ import { Id } from "./_generated/dataModel";
 import { generateUniqueToken } from "./security";
 import { resolveActiveShareGrant } from "./shareAccess";
 import { canProduceContent, canReviewContent } from "./contentWorkflow";
+import { matchesMuxUpload } from "./uploadIdentity";
 import { assertTeamCanStoreBytes } from "./billingHelpers";
 
 const workflowStatusValidator = v.union(
@@ -393,6 +394,7 @@ export const setUploadInfo = internalMutation({
 export const reconcileUploadedObjectMetadata = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.string(),
     fileSize: v.number(),
     contentType: v.string(),
   },
@@ -401,6 +403,8 @@ export const reconcileUploadedObjectMetadata = internalMutation({
     if (!video) {
       throw new Error("Video not found");
     }
+
+    if (video.s3Key !== args.uploadId) return false;
 
     const project = await ctx.db.get(video.projectId);
     if (!project) {
@@ -424,31 +428,40 @@ export const reconcileUploadedObjectMetadata = internalMutation({
       fileSize: actualSize,
       contentType: args.contentType,
     });
+    return true;
   },
 });
 
 export const markAsProcessing = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.string(),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (!video || video.s3Key !== args.uploadId) throw new Error("This upload was replaced.");
+    if (video.status === "processing" || video.status === "ready") return false;
     await ctx.db.patch(args.videoId, {
       status: "processing",
       muxAssetStatus: "preparing",
       uploadError: undefined,
     });
+    return true;
   },
 });
 
 export const markAsReady = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.optional(v.string()),
     muxAssetId: v.string(),
     muxPlaybackId: v.string(),
     duration: v.optional(v.number()),
     thumbnailUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (!video || !matchesMuxUpload(video, args) || (video.status !== "processing" && video.status !== "ready")) return false;
     await ctx.db.patch(args.videoId, {
       muxAssetId: args.muxAssetId,
       muxPlaybackId: args.muxPlaybackId,
@@ -458,44 +471,58 @@ export const markAsReady = internalMutation({
       uploadError: undefined,
       status: "ready",
     });
+    return true;
   },
 });
 
 export const markAsFailed = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.optional(v.string()),
+    muxAssetId: v.optional(v.string()),
+    muxUploadId: v.optional(v.string()),
     uploadError: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (!video || !matchesMuxUpload(video, args)) return false;
     await ctx.db.patch(args.videoId, {
       muxAssetStatus: "errored",
       uploadError: args.uploadError,
       status: "failed",
     });
+    return true;
   },
 });
 
 export const setMuxAssetReference = internalMutation({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.optional(v.string()),
     muxAssetId: v.string(),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (!video || !matchesMuxUpload(video, args) || video.status !== "processing") return false;
     await ctx.db.patch(args.videoId, {
       muxAssetId: args.muxAssetId,
       muxAssetStatus: "preparing",
       status: "processing",
     });
+    return true;
   },
 });
 
 export const setMuxPlaybackId = internalMutation({
   args: {
     videoId: v.id("videos"),
+    muxAssetId: v.string(),
     muxPlaybackId: v.string(),
     thumbnailUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.videoId);
+    if (!video || video.muxAssetId !== args.muxAssetId) return;
     await ctx.db.patch(args.videoId, {
       muxPlaybackId: args.muxPlaybackId,
       thumbnailUrl: args.thumbnailUrl,

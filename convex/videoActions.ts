@@ -193,6 +193,7 @@ async function ensurePublicPlaybackId(
   if (videoId && resolvedPlaybackId !== muxPlaybackId) {
     await ctx.runMutation(internal.videos.setMuxPlaybackId, {
       videoId,
+      muxAssetId,
       muxPlaybackId: resolvedPlaybackId,
       thumbnailUrl: buildMuxThumbnailUrl(resolvedPlaybackId),
     });
@@ -221,7 +222,7 @@ export const getUploadUrl = action({
 
     const s3 = getS3Client();
     const ext = getExtensionFromKey(args.filename);
-    const key = `videos/${args.videoId}/${Date.now()}.${ext}`;
+    const key = `videos/${args.videoId}/${crypto.randomUUID()}.${ext}`;
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: key,
@@ -243,6 +244,7 @@ export const getUploadUrl = action({
 export const markUploadComplete = action({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.optional(v.string()),
   },
   returns: v.object({
     success: v.boolean(),
@@ -257,6 +259,10 @@ export const markUploadComplete = action({
     if (!video || !video.s3Key) {
       throw new Error("Original bucket file not found for this video");
     }
+    if (args.uploadId && video.s3Key !== args.uploadId)
+      throw new Error("This upload was replaced. Use the current edit.");
+    if (video.status === "ready" || video.status === "processing") return { success: true };
+    if (video.status === "failed") throw new Error("This upload failed. Upload a new edit to retry.");
 
     try {
       const s3 = getS3Client();
@@ -286,23 +292,28 @@ export const markUploadComplete = action({
         throw new Error("Unsupported video format. Allowed: mp4, mov, webm, mkv.");
       }
 
-      await ctx.runMutation(internal.videos.reconcileUploadedObjectMetadata, {
+      const metadataApplied = await ctx.runMutation(internal.videos.reconcileUploadedObjectMetadata, {
         videoId: args.videoId,
+        uploadId: video.s3Key,
         fileSize: contentLength,
         contentType: normalizedContentType,
       });
 
-      await ctx.runMutation(internal.videos.markAsProcessing, {
+      if (!metadataApplied) throw new Error("This upload was replaced.");
+      const shouldIngest = await ctx.runMutation(internal.videos.markAsProcessing, {
         videoId: args.videoId,
+        uploadId: video.s3Key,
       });
+      if (!shouldIngest) return { success: true };
 
       const ingestUrl = await buildSignedBucketObjectUrl(video.s3Key, {
         expiresIn: 60 * 60 * 24,
       });
-      const asset = await createMuxAssetFromInputUrl(args.videoId, ingestUrl);
+      const asset = await createMuxAssetFromInputUrl(args.videoId, ingestUrl, video.s3Key);
       if (asset.id) {
         await ctx.runMutation(internal.videos.setMuxAssetReference, {
           videoId: args.videoId,
+          uploadId: video.s3Key,
           muxAssetId: asset.id,
         });
       }
@@ -328,6 +339,7 @@ export const markUploadComplete = action({
           : "Mux ingest failed after upload.";
       await ctx.runMutation(internal.videos.markAsFailed, {
         videoId: args.videoId,
+        uploadId: video.s3Key,
         uploadError,
       });
       throw error;
@@ -340,6 +352,7 @@ export const markUploadComplete = action({
 export const markUploadFailed = action({
   args: {
     videoId: v.id("videos"),
+    uploadId: v.optional(v.string()),
   },
   returns: v.object({
     success: v.boolean(),
@@ -347,8 +360,11 @@ export const markUploadFailed = action({
   handler: async (ctx, args) => {
     await requireVideoMemberAccess(ctx, args.videoId);
 
+    const video = await ctx.runQuery(api.videos.getVideoForPlayback, { videoId: args.videoId });
+    if (!video?.s3Key) return { success: true };
     await ctx.runMutation(internal.videos.markAsFailed, {
       videoId: args.videoId,
+      uploadId: args.uploadId ?? video.s3Key,
       uploadError: "Upload failed before Mux could process the asset.",
     });
 

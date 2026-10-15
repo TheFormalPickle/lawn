@@ -405,7 +405,8 @@ test("replacing bytes on the same video clears approval before processing can co
   await f.producer.mutation(api.contentItems.linkVideo, { itemId: id, videoId });
   await f.t.mutation(internal.videos.setUploadInfo, { videoId, s3Key: "synthetic/replaced.mp4", fileSize: 123, contentType: "video/mp4" });
   assert.equal((await f.producer.query(api.videos.get, { videoId })).workflowStatus, "review");
-  await f.t.mutation(internal.videos.markAsReady, { videoId, muxAssetId: "synthetic-asset", muxPlaybackId: "synthetic-playback" });
+  await f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "synthetic/replaced.mp4" });
+  await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId: "synthetic/replaced.mp4", muxAssetId: "synthetic-asset", muxPlaybackId: "synthetic-playback" });
   assert.equal((await f.cmo.query(api.contentItems.list, { teamId: f.teamId })).readyVideos.length, 0);
   await assert.rejects(f.cmo.query(api.contentItems.getReadyVideo, { videoId }), /not currently approved/);
   const unassigned = f.t.withIdentity({ subject: "unassigned" });
@@ -413,4 +414,51 @@ test("replacing bytes on the same video clears approval before processing can co
   assert.equal((await f.producer.query(api.videos.get, { videoId })).canUpload, true);
   await f.director.mutation(api.videos.updateWorkflowStatus, { videoId, workflowStatus: "done" });
   assert.equal((await f.cmo.query(api.contentItems.list, { teamId: f.teamId })).readyVideos[0]._id, videoId);
+});
+
+test("old processing events cannot certify, fail or remap a new original", async () => {
+  const f = await fixture();
+  const videoId = await f.video();
+  await f.t.mutation(internal.videos.setUploadInfo, { videoId, s3Key: "current.mp4", fileSize: 100, contentType: "video/mp4" });
+  for (const uploadId of [undefined, "old.mp4"]) {
+    assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId, muxAssetId: "old", muxPlaybackId: "old-playback" }), false);
+    assert.equal(await f.t.mutation(internal.videos.setMuxAssetReference, { videoId, uploadId, muxAssetId: "old" }), false);
+    assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, uploadId, muxAssetId: "old", uploadError: "old error" }), false);
+  }
+  assert.equal((await f.producer.query(api.videos.get, { videoId })).status, "uploading");
+  assert.equal(await f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "current.mp4" }), true);
+  assert.equal(await f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "current.mp4" }), false);
+  assert.equal(await f.t.mutation(internal.videos.setMuxAssetReference, { videoId, uploadId: "current.mp4", muxAssetId: "current" }), true);
+  assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId: "current.mp4", muxAssetId: "different", muxPlaybackId: "wrong" }), false);
+  assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId: "current.mp4", muxAssetId: "current", muxPlaybackId: "current-playback" }), true);
+  assert.equal(await f.t.mutation(internal.videos.setMuxAssetReference, { videoId, uploadId: "current.mp4", muxAssetId: "current" }), false);
+  assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, uploadId: "old.mp4", muxAssetId: "old" }), false);
+  assert.equal((await f.producer.query(api.videos.get, { videoId })).status, "ready");
+});
+
+test("cancellation keeps late ready events from reviving an abandoned upload", async () => {
+  const f = await fixture(); const videoId = await f.video();
+  await f.t.mutation(internal.videos.setUploadInfo, { videoId, s3Key: "cancelled.mp4", fileSize: 100, contentType: "video/mp4" });
+  await f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "cancelled.mp4" });
+  assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, uploadId: "cancelled.mp4" }), true);
+  assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, uploadId: "cancelled.mp4", muxAssetId: "late", muxPlaybackId: "late" }), false);
+  assert.equal((await f.producer.query(api.videos.get, { videoId })).status, "failed");
+});
+
+test("legacy events require a concrete current asset or upload reference", async () => {
+  const f = await fixture(); const videoId = await f.video(f.projectId, "review", "processing");
+  await f.t.run(ctx => ctx.db.patch(videoId, { muxAssetId: "legacy-asset", muxUploadId: "legacy-upload" }));
+  assert.equal(await f.t.mutation(internal.videos.markAsReady, { videoId, muxAssetId: "legacy-asset", muxPlaybackId: "legacy-playback" }), true);
+  assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, muxUploadId: "foreign-upload" }), false);
+  assert.equal(await f.t.mutation(internal.videos.markAsFailed, { videoId, muxUploadId: "legacy-upload" }), true);
+});
+
+test("stale original metadata and playback resolutions cannot overwrite a replacement", async () => {
+  const f = await fixture(); const videoId = await f.video();
+  await f.t.mutation(internal.videos.setUploadInfo, { videoId, s3Key: "current.mp4", fileSize: 100, contentType: "video/mp4" });
+  assert.equal(await f.t.mutation(internal.videos.reconcileUploadedObjectMetadata, { videoId, uploadId: "old.mp4", fileSize: 3, contentType: "video/webm" }), false);
+  await assert.rejects(f.t.mutation(internal.videos.markAsProcessing, { videoId, uploadId: "old.mp4" }), /replaced/);
+  await f.t.mutation(internal.videos.setMuxPlaybackId, { videoId, muxAssetId: "old", muxPlaybackId: "old-playback" });
+  const current = await f.producer.query(api.videos.get, { videoId });
+  assert.equal(current.fileSize, 100); assert.equal(current.contentType, "video/mp4"); assert.equal(current.muxPlaybackId, undefined);
 });

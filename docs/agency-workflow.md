@@ -51,7 +51,7 @@ They must never be deployed or copied into production.
 
 ## Verification and remaining acceptance
 
-The regression suite passes 15 tests across three files. It exercises Convex
+The regression suite passes 20 tests across four files. It exercises Convex
 handlers against an in-memory test backend: roles, cross-team/project linking,
 create replay identity, current-version approval, stale edits, deletion cleanup,
 existing-video compatibility and same-ID original-file replacement.
@@ -77,3 +77,26 @@ configure and verify Clerk sign-in, Convex, object storage and Mux for the inten
 environment; rehearse roles with real test accounts; verify original-file upload,
 playback, comments and downloads. No production deployment or customer migration
 is authorized by local acceptance.
+
+## Interrupted uploads and processing events
+
+Processing notifications carry the exact original-file attempt, not just a video
+ID. Old ready/error/created events cannot advance, fail or remap a replacement.
+Legacy notifications require a matching saved asset/upload reference; an old bare
+video ID alone is insufficient. Repeated created events cannot move ready media
+back to processing. Invalid webhook signatures remain rejected. There is no new
+provider polling or per-file background job.
+
+After a successful byte transfer, a lost confirmation is labeled unconfirmed.
+**Retry confirmation** reuses the same video and original-file identity; it does
+not create another video or upload the bytes again. A failed transfer and an
+uncertain acknowledgment remain distinct. Failed media stays out of review and
+the finished library; the assignment explains how to upload a new version.
+These pending confirmations live in the current page, not durable crash/restart
+storage. Already issued signed download URLs retain their original expiry.
+
+Actual local-backend acceptance covers old and current signed events, cancellation,
+invalid signatures, exact replacement download bytes and both before/after-commit
+lost confirmation boundaries through the actual uploader and progress component.
+The full assignment/review/CMO journey was rerun after these changes. Local
+synthetic identities/media remain distinct from real Clerk and live providers.

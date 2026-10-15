@@ -62,6 +62,7 @@ export default function DashboardLayout() {
     uploads,
     uploadFilesToProject,
     cancelUpload,
+    retryUploadConfirmation,
   } = useVideoUploadManager();
   const [isGlobalDragActive, setIsGlobalDragActive] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
@@ -255,6 +256,7 @@ export default function DashboardLayout() {
               bytesPerSecond={upload.bytesPerSecond}
               estimatedSecondsRemaining={upload.estimatedSecondsRemaining}
               onCancel={() => cancelUpload(upload.id)}
+              onRetryConfirmation={() => retryUploadConfirmation(upload.id)}
             />
           ))}
         </div>

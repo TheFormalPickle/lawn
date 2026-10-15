@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internalAction, ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { parseMuxUploadIdentity } from "./uploadIdentity";
 import {
   buildMuxThumbnailUrl,
   getMuxAsset,
@@ -87,9 +88,9 @@ async function resolveVideoIdFromMuxRefs(
     }
   }
 
-  const passthrough = asString(data.passthrough);
+  const passthrough = parseMuxUploadIdentity(asString(data.passthrough));
   if (passthrough) {
-    return passthrough as Id<"videos">;
+    return passthrough.videoId as Id<"videos">;
   }
 
   return null;
@@ -159,11 +160,12 @@ export const processWebhook = internalAction({
             break;
           }
 
-          await ctx.runMutation(internal.videos.setMuxAssetReference, {
+          const applied = await ctx.runMutation(internal.videos.setMuxAssetReference, {
             videoId,
+            uploadId: parseMuxUploadIdentity(asString(data.passthrough))?.uploadId,
             muxAssetId: assetId,
           });
-          console.log("Mapped Mux asset to video", {
+          console.log(applied ? "Mapped Mux asset to video" : "Ignored superseded Mux asset.created", {
             eventType,
             videoId,
             assetId,
@@ -221,14 +223,15 @@ export const processWebhook = internalAction({
             break;
           }
 
-          await ctx.runMutation(internal.videos.markAsReady, {
+          const applied = await ctx.runMutation(internal.videos.markAsReady, {
             videoId,
+            uploadId: parseMuxUploadIdentity(resolvedPassthrough)?.uploadId,
             muxAssetId: assetId,
             muxPlaybackId: playbackId,
             duration,
             thumbnailUrl: buildMuxThumbnailUrl(playbackId),
           });
-          console.log("Marked video ready from Mux webhook", {
+          console.log(applied ? "Marked video ready from Mux webhook" : "Ignored superseded Mux asset.ready", {
             eventType,
             videoId,
             assetId,
@@ -263,6 +266,8 @@ export const processWebhook = internalAction({
           });
           await ctx.runMutation(internal.videos.markAsFailed, {
             videoId,
+            muxAssetId: assetId,
+            uploadId: parseMuxUploadIdentity(asString(data.passthrough))?.uploadId,
             uploadError: errorMessage,
           });
           break;
@@ -304,6 +309,7 @@ export const processWebhook = internalAction({
           });
           await ctx.runMutation(internal.videos.markAsFailed, {
             videoId,
+            muxUploadId: uploadId,
             uploadError: errorMessage,
           });
           break;

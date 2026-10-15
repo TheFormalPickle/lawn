@@ -473,6 +473,15 @@ export function ContentTracker({
                   {error}
                 </p>
               )}
+              {selected.video && selected.video.status !== "ready" && (
+                <p role={selected.video.status === "failed" ? "alert" : "status"} className="text-sm">
+                  {selected.video.status === "failed"
+                    ? "This upload failed. Upload a new version to retry; it must finish processing before review."
+                    : selected.video.status === "uploading"
+                      ? "Uploading the original file. Review opens when processing finishes."
+                      : "Processing this edit. Review opens when it is ready."}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 {data.canManage && (
                   <Button
@@ -518,7 +527,7 @@ export function ContentTracker({
                     </label>
                   </>
                 )}
-                {selected.video && (
+                {selected.video?.status === "ready" && (
                   <a
                     className="border-2 border-[#1a1a1a] px-3 py-2 text-sm font-bold hover:bg-[#e8e8e0]"
                     href={videoPath(
